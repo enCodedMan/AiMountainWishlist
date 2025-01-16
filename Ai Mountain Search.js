@@ -118,22 +118,25 @@ Do not include any additional text or explanation.
         const location = match[3].trim();
         const isFourteener = match[4].trim() === "Yes";
 
-        return { name, height, location, isFourteener };
+        // Combine the name and height
+        const combinedName = `${name} @ ${height}`;
+
+        return { name: combinedName, originalName: name, height, location, isFourteener };
     } catch (error) {
         return { error: error.message };
     }
 }
 
 // Check if the mountain is a Fourteener and get its link
-function getFourteenerLink(mountainName) {
-    const normalizedInput = mountainName.toLowerCase().trim();
+function getFourteenerLink(originalName) {
+    const normalizedInput = originalName.toLowerCase().trim();
     for (const fourteener of fourteenersData) {
         const normalizedFourteener = fourteener.name.toLowerCase().trim();
         if (normalizedInput === normalizedFourteener) {
             return { isFourteener: true, url: fourteener.url };
         }
     }
-    return { isFourteener: false, url: `https://www.google.com/search?q=${encodeURIComponent(mountainName)}` };
+    return { isFourteener: false, url: `https://www.google.com/search?q=${encodeURIComponent(originalName)}` };
 }
 
 // Main script logic
@@ -149,7 +152,7 @@ function getFourteenerLink(mountainName) {
         }
 
         // Validate against the hardcoded Fourteener list for consistent links
-        const { isFourteener, url } = getFourteenerLink(mountainDetails.name);
+        const { isFourteener, url } = getFourteenerLink(mountainDetails.originalName);
 
         // Final output
         const output = {
