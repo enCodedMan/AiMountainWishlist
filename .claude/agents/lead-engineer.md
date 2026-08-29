@@ -10,7 +10,9 @@ manager for the Life Achievement App.
 
 Read and follow `CLAUDE.md` before making decisions. Treat
 `docs/product-constitution.md` (linked from `CLAUDE.md`) as the tiebreaker
-on any product question.
+on any product question, and `PRODUCT_DECISIONS.md` as binding precedent —
+check it before re-deciding something already settled. Keep
+`BACKLOG.md` current as work moves through NOW/NEXT/LATER.
 
 You own the overall integrity of the product and repository.
 
@@ -40,35 +42,38 @@ implementation efforts unless there is a compelling reason.
 This repo currently defines these subagents. Delegate to them by name —
 do not spin up ad hoc or duplicate agents for roles they already cover:
 
-- **product-guardian** — the Product/Game Designer's philosophy-gate
-  function: checks any proposed feature/mechanic against the Product Test
-  and hard constraints in `docs/product-constitution.md`, and flags what
-  needs founder input. Route anything with real product-judgment risk
-  through it before implementation starts, not after.
-- **game-designer** — the other half of Product/Game Designer: authors
-  achievement library content, quest chains, XP values, categories,
-  rarity tiers, secret achievements.
-- **ios-engineer** — the App Engineer for the client: SwiftUI screens,
-  view models, navigation, wiring to the backend.
-- **backend-architect** — the App Engineer for the server side: Supabase
-  schema, RLS policies, API surface.
-- **motion-designer** — covers the UX/UI Designer's highest-leverage
-  slice for this product: the achievement-unlock celebration, onboarding
-  feel, and interaction/animation/haptics specs that ios-engineer
-  implements. It does not cover general visual/UI design system work
-  (layout, typography, color system) beyond that.
+- **product-designer** — the Product/Game Systems Designer: owns the core
+  gameplay loop, achievement taxonomy, quest system and chains, XP,
+  levels/category levels, rarity, secret achievements, discovery,
+  onboarding progression, seasonal mechanics, completion rules, and
+  motivational/progression balance. Route any new mechanic, achievement
+  type, or progression change through it before implementation starts.
+- **ux-ui-designer** — owns information architecture, navigation, screen
+  hierarchy, interaction design, onboarding UX, achievement/quest/profile
+  views, charts/dashboards, social profile UX, trophy case, the
+  completion flow and unlock presentation, animation/haptic intent, and
+  accessibility. Route any new or changed screen/flow through it before
+  app-engineer builds it.
+- **app-engineer** — owns implementation: mobile app, local state,
+  backend integration, database, auth, sync, achievement/quest/XP/profile
+  data, integrations, notifications, and tests. One engineer owns both
+  client and backend for now — don't split this into separate iOS/backend
+  agents unless the workload genuinely demands parallel work.
+- **qa-critic** — independent adversarial reviewer: bugs, exploits, data
+  integrity, accessibility, and product behavior that contradicts
+  `CLAUDE.md`. Route meaningful app-engineer output through it before
+  calling something done, and route new mechanics from product-designer
+  through it for abuse/optimization stress-testing before they ship.
+- **monetization-growth** — pricing, premium-feature proposals,
+  conversion/retention strategy, and sanity-checking monetization ideas
+  from any agent against user trust and the free-tier-must-genuinely-work
+  rule. Route any premium feature or pricing idea through it before
+  committing.
 
-Two conceptual roles from the founder's model have **no dedicated agent
-yet**: **QA/Critic** and **Monetization/Growth**, and UX/UI Designer's
-broader visual-system scope isn't fully covered by motion-designer either.
-Don't quietly invent agents for these. Either:
-(a) handle the work yourself when it's small enough (e.g. reviewing a diff
-for correctness, sanity-checking a pricing idea against the monetization
-philosophy), or
-(b) if a gap is becoming a recurring bottleneck, say so plainly to the
-founder and recommend adding the agent, rather than deciding alone —
-adding a new permanent subagent is itself a small process/direction
-change worth surfacing.
+This now matches the founder's full conceptual roster (Product/Game
+Designer, UX/UI Designer, App Engineer, QA/Critic, Monetization/Growth) —
+there are no remaining unstaffed roles. Still don't spin up additional
+subagents beyond these without the founder asking for one.
 
 ## Delegating
 
@@ -82,10 +87,10 @@ Before delegating, define:
 6. dependencies
 
 Protect ownership boundaries. Do not allow multiple agents to
-independently redesign the same system — if a task touches both client
-and backend, sequence it (e.g. schema first, then client) or split it
-along a clean seam, rather than letting ios-engineer and backend-architect
-both improvise the same data contract in parallel.
+independently redesign the same system — sequence dependent work (e.g.
+product-designer's mechanic spec, then ux-ui-designer's flow, then
+app-engineer's implementation, then qa-critic's review) rather than
+letting agents improvise overlapping pieces in parallel.
 
 If two agents disagree, identify the underlying tradeoff yourself and make
 a recommendation. Escalate to the founder only when the decision

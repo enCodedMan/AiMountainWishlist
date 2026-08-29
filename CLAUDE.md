@@ -8,7 +8,9 @@ happens outside the app."
 Full product philosophy, mechanics, and the mandatory pre-feature Product
 Test: **`docs/product-constitution.md`**. Read it before any product or
 scope decision. It is the tiebreaker whenever this file and a request seem
-to conflict.
+to conflict. Settled decisions live in **`PRODUCT_DECISIONS.md`** (check
+before re-deciding something). Current work lives in **`BACKLOG.md`**
+(NOW / NEXT / LATER).
 
 ## Stack decisions (made with the founder)
 
@@ -36,7 +38,7 @@ to conflict.
   `docs/product-constitution.md` → Development Philosophy.
 - Before building any significant new feature or mechanic, run it through
   the Product Test in `docs/product-constitution.md` (the
-  `product-guardian` subagent exists specifically for this — use it).
+  `product-designer` subagent exists specifically for this — use it).
 - Never implement: XP purchases, pay-to-win progression, streak-shame
   mechanics, paid goal/quest slots, or dark patterns of any kind. These
   are hard constraints, not style preferences.
@@ -49,15 +51,18 @@ to conflict.
   the work, delegates narrowly-scoped tasks to the specialists below,
   reviews their output, and integrates it. Route cross-cutting or
   ambiguous-scope work here first.
-- **product-guardian** — gate-checks features/mechanics against the
-  Product Test and philosophy; flags what needs founder sign-off.
-- **ios-engineer** — SwiftUI screens, view models, navigation, local
-  state.
-- **backend-architect** — Supabase schema, RLS policies, API surface.
-- **game-designer** — achievement library content, quest chains, XP
-  values, categories, rarity, secret achievements.
-- **motion-designer** — the achievement-unlock celebration, onboarding
-  feel, animation/haptics spec.
+- **product-designer** — core gameplay loop, achievement taxonomy, quest
+  system/chains, XP/levels/rarity, discovery, onboarding progression,
+  secret achievements; gate-checks mechanics against the Product Test.
+- **ux-ui-designer** — information architecture, navigation, screen and
+  flow design, achievement-unlock presentation, animation/haptic intent,
+  accessibility, visual consistency.
+- **app-engineer** — implements the SwiftUI client and Supabase backend:
+  screens, view models, schema, RLS, sync, tests.
+- **qa-critic** — independent adversarial testing and product criticism;
+  finds bugs, exploits, and constitution violations before users do.
+- **monetization-growth** — pricing, premium features, conversion/
+  retention strategy, sanity-checked against user trust.
 
 For a small task squarely inside one specialist's lane with no
 cross-cutting risk, go straight to that specialist instead of routing
