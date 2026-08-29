@@ -296,7 +296,6 @@ not a suggestion.
 |---|---|---|
 | Read 12 books in a year | cumulativeCount | 200 |
 | Graduate high school | binary | 150 |
-| Become conversational in a new language | binary | 750 |
 | Graduate college (bachelor's) | binary | 1500 |
 | Earn a master's degree | binary | 2000 |
 | Earn a PhD | binary | 5000 |
@@ -492,11 +491,15 @@ categories, plus one forward-reference example.
 | Rung | Achievement | XP |
 |---|---|---|
 | 1 | Hike a peak over 5,000 ft | 30 |
-| 2 | Hike a peak over 8,000 ft | 75 |
+| 2 | Hike a peak over 8,000 ft | 50 |
 | 3 | Hike a peak over 10,000 ft | 150 |
 | 4 | Summit your first 14er (14,000 ft) | 500 |
 | 5 | Summit five different 14ers | 1000 |
 | 6 | Summit a peak over 6,000 m (e.g., Aconcagua-tier) | 5000 |
+
+(Corrected 2026-08-29: rung 2 was originally 75 XP, which isn't one of
+the fixed discrete band values in §3.1 — caught while seeding
+`backend/supabase/seed/achievements.v1.json`. Now 50 XP.)
 
 ### 4.2 Skills — "Language Fluency"
 
