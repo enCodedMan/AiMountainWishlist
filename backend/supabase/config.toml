@@ -1,0 +1,47 @@
+# Minimal hand-written Supabase CLI config for local development.
+#
+# IMPORTANT: this file was written without access to the founder's real
+# Supabase project and without the Supabase CLI available in this session.
+# Treat it as a starting point only — reconcile it against the real thing
+# by running `supabase init` in a fresh scratch directory (or `supabase
+# link --project-ref <ref>` once the founder's project exists) and diffing,
+# rather than assuming this is final. See the delivery report.
+
+project_id = "stones"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = []
+jwt_expiry = 3600
+enable_signup = true
+
+# PD-005: MVP sign-in methods are Sign in with Apple + email/password only.
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+
+[auth.external.apple]
+enabled = true
+client_id = ""
+secret = ""
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"

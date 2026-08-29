@@ -364,16 +364,21 @@ explainable in one sentence, not a hidden exponential curve.
 
 | Level | Cumulative XP | Level | Cumulative XP |
 |---|---|---|---|
-| 1 | 0 | 11 | 3,300 |
-| 2 | 100 | 12 | 4,000 |
-| 3 | 250 | 13 | 4,800 |
-| 4 | 450 | 14 | 5,700 |
-| 5 | 700 | 15 | 6,700 |
+| 1 | 0 | 11 | 3,250 |
+| 2 | 100 | 12 | 3,850 |
+| 3 | 250 | 13 | 4,500 |
+| 4 | 450 | 14 | 5,200 |
+| 5 | 700 | 15 | 5,950 |
 | 6 | 1,000 | 20 | 10,450 |
 | 7 | 1,350 | 30 | 23,200 |
-| 8 | 1,750 | 40 | 41,700 |
+| 8 | 1,750 | 40 | 40,950 |
 | 9 | 2,200 | 50 | 63,700 |
 | 10 | 2,700 | | |
+
+(Corrected 2026-08-29: levels 11–15 and 40 in the original table didn't
+match `cumulative(L) = 25×(L−1)×(L+2)`, the formula this table is meant to
+illustrate — caught by `app-engineer` while implementing `LevelCurve.swift`.
+The formula is authoritative per §3.4; these are now its exact values.)
 
 Sanity check against onboarding: a plausible retroactive profile (ran a
 first 5K, visited 3 new countries, graduated college, learned to swim,
