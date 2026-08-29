@@ -50,6 +50,19 @@
   Open Questions #9 updated to reflect this is no longer blocked on
   product design, only on database existence and (for Personal Record
   History specifically) a dedicated `ux-ui-designer` screen-layout pass.
+- Personal Record History screen design — `docs/wireframes.md` §5d/§5e:
+  inline Personal Records card, all-stats list, per-stat drill-in with
+  record-broken markers (normalized so "improvement" always reads as
+  "up" regardless of a stat's comparison direction), and the create/
+  log/edit/delete flows — including the one deliberate divergence from
+  this doc's "history is permanent" pattern, since `StatEntry` is
+  user-editable/deletable. No further design work remains for this
+  screen; only the live database is missing.
+
+**This closes every M0/M0-follow-up item reachable without the
+founder's accounts.** Everything below in NEXT needs the real Supabase
+project (and, separately, a Mac to actually verify anything already
+written).
 
 M0 is otherwise complete. Blocked on the founder for: (1) verifying the
 scaffold on a Mac, (2) creating the real Supabase project so `app-engineer`
@@ -70,12 +83,11 @@ for device testing (not urgent — Simulator covers early M1 work).
 - Achievement completion
 - XP calculations
 - Category levels
-- Stats & Personal Records, Seasonal Comparisons (Charts screen): now
-  fully speced (`docs/domain-model.md` §8/§9) — implementable as soon as
-  the founder's real Supabase project exists (same blocker as
-  Authentication above). Personal Record History's on-screen drill-in
-  layout still needs a dedicated `ux-ui-designer` pass before that one
-  card can go past "Coming soon" even once the schema is live.
+- Stats & Personal Records, Seasonal Comparisons (Charts screen): fully
+  speced end-to-end (`docs/domain-model.md` §8/§9, `docs/wireframes.md`
+  §5d/§5e) — implementable as soon as the founder's real Supabase
+  project exists (same blocker as Authentication above). No remaining
+  design work.
 - Meta-achievement evaluator: new engineering scope (not a
   `CompletionCriteria` extension) to support the 6 secret achievements
   proposed in `docs/seed-achievements.md` §5 — each depends on a user's
