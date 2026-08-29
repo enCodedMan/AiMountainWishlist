@@ -10,6 +10,11 @@
 - Wireframe profile — `docs/wireframes.md` (flags a founder decision:
   confirm deferring the profile public/private toggle to post-Friends,
   structural DB field only for now, is right — see doc §4f)
+- Seed achievement library v1 — `backend/supabase/seed/achievements.v1.json`
+  (107 built-in achievements), `docs/seed-achievements.md`. Not yet
+  loaded into any database (no Supabase project exists yet) or decoded
+  by app-engineer's seed-loading code — that's the NEXT "Achievement
+  library" item below.
 - Repo scaffold — `app/LifeAchievementCore` (domain types + XCTest
   coverage), `app/project.yml` (XcodeGen), first Supabase migration at
   `backend/supabase/migrations/`. **Written but unverified** — no
@@ -23,21 +28,30 @@ for device testing (not urgent — Simulator covers early M1 work).
 
 # NOW
 
-- Expand seed achievement library content beyond the ~35 worked examples
-  in `docs/domain-model.md` §3.2, toward a real MVP-sized built-in
-  library across the six seeded categories (in progress)
 - Charts/Analytics screen wireframe (flagged as out of scope by the
   Profile pass — needed before `app-engineer` builds it)
+- Quest chain metadata schema gap: nothing currently stores a chain's own
+  display name/description (e.g. "5K Questline") — `docs/wireframes.md`'s
+  achievement-detail screen already assumes this exists ("Part of the 5K
+  Questline · Step 3 of 6"). Small migration addition, surfaced while
+  writing seed content — needed before that part of achievement detail
+  can be built.
 
 # NEXT
 
 - Authentication (blocked on founder's Supabase project)
 - User profile
-- Achievement library (schema/seed-loading, once library content exists)
+- Achievement library (decode/import `achievements.v1.json` once a real
+  Supabase project exists)
 - Quest creation
 - Achievement completion
 - XP calculations
 - Category levels
+- Meta-achievement evaluator: new engineering scope (not a
+  `CompletionCriteria` extension) to support the 6 secret achievements
+  proposed in `docs/seed-achievements.md` §5 — each depends on a user's
+  full achievement/category state, not a single stat. Not urgent; secrets
+  aren't core-loop-critical for an MVP.
 
 # LATER
 
