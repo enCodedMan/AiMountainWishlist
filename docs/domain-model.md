@@ -735,3 +735,364 @@ as settled fact:
   past those for anything not covered here, especially around
   verification-level social pressure and leaderboard interactions once
   those exist.
+
+---
+
+## 8. Stats & Personal Records
+
+This section closes the gap `ux-ui-designer` flagged while spec'ing the
+Charts screen (`docs/wireframes.md` §5a #9, §5c): nothing in this doc
+previously modeled a "stat" — a continuous, user-tracked measurement with
+a *history* — as its own entity. The only thing close to it,
+`UserAchievementInstance.progressValue` (§1.2), is a single current value
+scoped to one achievement's own completion criteria; it has no history,
+no independent existence outside that one achievement, and no concept of
+"what was my best value, and when did each record get broken."
+
+### 8.1 `Stat`
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | UUID | |
+| `userId` | UUID | User-scoped — a stat belongs to one user, never shared or global. There is no fixed global stat catalog every user is given; the constitution is explicit that users "should only track stats they care about" and the app must never demand dozens of irrelevant statistics. |
+| `name` | String | User-chosen — either typed freeform or copied from a suggestion at creation (§8.5). |
+| `category` | `Category` enum (§2, reused — not a new vocabulary) | Chosen at creation (pre-filled by a suggestion, or picked in one tap for a freeform stat). Used for grouping/display only; has no effect on achievement-catalog seeding status (§2) — Stats are not gated by which categories have curated built-in achievements. |
+| `unit` | String | Free text (e.g. `"min:sec"`, `"lb"`, `"countries"`, `"$"`) — deliberately a string, not an enum, matching the existing `unit: String` precedent on `cumulativeCount`/`thresholdRecord` (§1.3); units are too varied to usefully enumerate. |
+| `comparisonDirection` | `atLeast \| atMost` | Reused verbatim from §1.3's `thresholdRecord` vocabulary — deliberately not a new enum or new terms, per this task's instruction. |
+| `createdAt` | Timestamp | |
+
+**Deletion is a real, hard delete** (cascading to that stat's `StatEntry`
+rows), unlike a completed achievement. This is a deliberate asymmetry: the
+constitution's "completed achievements remain permanently part of the
+user's history" rule is about accomplishment records, not raw personal
+measurements — a `Stat` is a tracking *preference* the user fully owns and
+controls, so removing one they no longer care about should be a clean,
+unambiguous delete, not a soft-hide with lingering rows.
+
+### 8.2 `StatEntry`
+
+One logged value at a point in time — this is what makes a value
+*history* rather than a single current number.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | UUID | |
+| `statId` | UUID | FK → `Stat.id`, cascade delete. |
+| `userId` | UUID | Denormalized alongside `statId`, same pattern `xp_ledger` already uses (storing `user_id` directly rather than requiring a join) — simplifies RLS ownership checks and queries. |
+| `value` | Double | |
+| `recordedAt` | Timestamp | The date/time this value is *true for* — defaults to now at entry time but is user-editable, so a user can log a personal record they actually hit a few days ago before opening the app. This is the timestamp all history and personal-record derivation (§8.3) uses. |
+| `note` | String? | Optional. |
+| `createdAt` | Timestamp | The actual row-insertion time — immutable, audit-only, distinct from `recordedAt`. Not shown to the user. |
+
+**Mutability — a deliberate divergence from the XP ledger's append-only
+rule (§3).** Unlike `xp_ledger`, `StatEntry` rows are ordinary user-owned
+data: the owner may edit or delete an entry directly (fixing a typo,
+removing a bad log), with no reversal/immutability machinery. A stat
+entry doesn't grant any reward that needs an auditable undo path — the
+personal record it might represent is derived live from the row set
+(§8.3), so editing or deleting a row simply changes what a future query
+returns. Bolting XP-ledger-style immutability onto this would be
+unnecessary rigor for data that carries no reward at all in v0.1.
+
+### 8.3 Deriving the personal record and "record broken" events
+
+**Current personal record:** the entry with the best `value` per stat —
+`MAX(value)` if `atLeast`, `MIN(value)` if `atMost` — evaluated live from
+`StatEntry` on query. No `currentRecord` column is stored or cached on
+`Stat`.
+
+**Record-broken event: derived on demand, not stored as its own table.**
+Ordering a stat's entries by `recordedAt` ascending, a "record-broken"
+event is any entry whose value strictly improves on the best value among
+all prior entries for that stat — a running best-so-far comparison,
+directly expressible as a single Postgres window function (e.g. compare
+each row's `value` against `min(value) over (partition by stat_id order
+by recorded_at rows between unbounded preceding and 1 preceding)` for
+`atMost`, the max-equivalent for `atLeast`). **Ties do not count** — the
+value must strictly improve, not merely match, so a repeat identical
+value doesn't generate a hollow "you broke a record!" moment.
+
+**Justification for deriving rather than storing this as its own event
+table**, weighed explicitly against "avoid premature scaling": a stored
+event table would need write-time logic to detect and flag a "broken"
+event at entry-creation, and — because §8.2 explicitly allows editing or
+backdating an entry after the fact — would need reconciliation logic
+every time a past entry changes, since a correction could retroactively
+change which historical entries were records. A live window-function
+query over what is, realistically, a small personal dataset (years of
+manual logging tops out at dozens-to-low-hundreds of rows per stat per
+user) is always correct, even after edits, and costs nothing meaningful
+at this scale. This is the same call §5 already made for rarity: compute
+the aggregate, don't cache a value that can drift out of sync with its
+source. **For `app-engineer`:** this is a query pattern (a parameterized
+query or view) layered on §8.1/§8.2 — no schema beyond those two tables.
+
+### 8.4 Relationship to the deferred stat-relative `thresholdRecord` (§1.3)
+
+Explicit call, stated plainly rather than left ambiguous: **`Stat`
+unblocks §1.3's deferred edge case structurally but does not implement
+it.** §1.3 flagged completion criteria relative to another user stat
+(e.g., "bench your own bodyweight") and deferred it because evaluating
+that requires completion criteria to read a live user stat. This section
+now gives that a real place to read from — but wiring `CompletionCriteria`
+evaluation to actually do so (a new criteria shape, something like
+`statRelativeThreshold` referencing a `statId` plus a multiplier, e.g.
+"≥ 1.0× the user's logged bodyweight stat") is separate future engineering
+scope. It touches the achievement-completion evaluation path itself —
+what happens when the referenced stat has no entries yet, what happens if
+the user later deletes a stat an achievement's criteria depends on, when
+evaluation re-runs as new entries arrive — not just data modeling. This is
+the same category of deferral as the meta-achievement evaluator in
+`docs/seed-achievements.md` §5: the data existing is necessary but not
+sufficient; the evaluator is a separately scoped piece of engineering
+work, not something silently bundled into "just add a Stat table." Not
+building it now. v0.1 seed content keeps using fixed tiers per §1.3's
+existing guidance; revisit if/when there's a concrete content need.
+
+**A related, smaller overlap, named explicitly so it isn't silently
+assumed either way:** some curated `Stat` suggestions (e.g. "Countries
+visited," §8.5) sound similar to an achievement's own `cumulativeCount`
+`progressValue` (e.g. "Visit 10 countries"). These are two independent,
+decoupled systems in v0.1 — logging a `StatEntry` never automatically
+advances a matching achievement's `progressValue`, and completing an
+achievement never automatically writes a `StatEntry`. Auto-linking the
+two is a plausible future convenience but belongs to the same "wire
+evaluation to live user data" scope as the paragraph above, not something
+this doc expands to cover now.
+
+### 8.5 MVP scope
+
+**Both curated suggestions and freeform naming — not one or the other.**
+
+A short, fixed list of suggestions at creation (never a mandatory global
+catalog — a starting point the user is free to ignore entirely), drawn
+from the constitution's own "Life Statistics" examples and deliberately
+skewed toward genuinely continuous, direction-comparable measurements
+(times, weights, distances, money amounts) that read naturally as
+"current best / when did it improve" — as opposed to count-style trackers
+generally better served by an achievement's own `cumulativeCount`
+(§8.4's overlap note):
+
+| Suggestion | Category | Direction | Example unit |
+|---|---|---|---|
+| Fastest 5K | Fitness | atMost | mm:ss |
+| Fastest mile | Fitness | atMost | mm:ss |
+| Longest run | Fitness | atLeast | mi / km |
+| Bench press max | Fitness | atLeast | lb / kg |
+| Max consecutive pull-ups | Fitness | atLeast | count |
+| Highest elevation reached | Adventure | atLeast | ft / m |
+| Countries visited | Travel | atLeast | count |
+| Net worth | Money | atLeast | currency |
+| Passive income | Money | atLeast | currency / mo |
+| Books read (lifetime) | Education | atLeast | count |
+
+Selecting a suggestion pre-fills name/category/unit/direction in one tap;
+the user can still rename or change the unit before saving. Money and
+Education appearing here doesn't conflict with §2's decision to leave
+those categories' *achievement* library unseeded at MVP — Stats aren't
+gated by achievement-catalog curation status; they're a separate,
+always-available personal tracking surface with no library to curate
+beyond this short suggestion list.
+
+Deliberately **not** included: any streak-shaped suggestion ("days in a
+row exercising," etc.) — consistent with the constitution's categorical
+ban on streak mechanics, even framed as an opt-in personal stat. Nothing
+stops a user from freeform-naming one themselves, but the app never
+suggests it.
+
+**Freeform creation** — name, category, unit, direction, all
+user-entered. Same low-friction bar the constitution sets for
+user-created achievements ("avoid a twenty-field form"): four fields, no
+required description, no deadline.
+
+**Entry logging stays fast** — a single numeric input (mirroring
+Achievement Detail's existing `Log Progress` quick-entry pattern,
+`docs/wireframes.md` §3: a number pad, not a form) plus an optional date
+(defaults to today) and an optional note. This is the highest-frequency
+interaction on this entity and must never grow into a multi-field form.
+
+### 8.6 Required write-up: Stats & Personal Records
+
+1. **User problem.** Real progress in continuous, ongoing pursuits
+   (getting faster, stronger, richer, more well-traveled) doesn't fit
+   discrete achievement completions — a user wants to see how their 5K
+   time actually trended over three years, not just whether they ever
+   broke 25 minutes once.
+2. **Mechanic.** A user-scoped `Stat` (name/unit/direction) with an
+   editable `StatEntry` history; the current personal record and "record
+   broken" moments are both derived live from that history rather than
+   tracked as separate mutable state.
+3. **Why it works.** Continuous data gets a continuous home instead of
+   being forced into achievement's binary/threshold shapes. Deriving
+   records live keeps the system simple and correct even when a user
+   edits or backdates an entry. Curated suggestions remove the blank-page
+   problem while freeform naming honors "only track what you care about."
+4. **Possible unintended behavior.**
+   - A user inflates or fabricates entries to manufacture a flattering
+     trend — the same class of self-report trust issue as XP padding
+     (§3.4), though lower stakes today since Stats grant no XP in v0.1.
+   - A user creates several near-duplicate stats ("Fastest 5K," "Fastest
+     5k run," "5K PR"), fragmenting one history across multiple rows.
+   - Backdating an entry to an implausible date to claim an earlier
+     record than actually happened.
+5. **Proposed safeguards.**
+   - Stats carry no XP and don't feed the level formula in v0.1 — there's
+     structurally nothing to gain by gaming a Stat beyond a private
+     vanity number today, a much weaker incentive than XP padding. Worth
+     re-examining once a future feature (verified integrations, or the
+     deferred stat-relative achievement criteria in §8.4) gives Stats
+     real downstream stakes.
+   - Soft duplicate nudge at creation, mirroring §3.4's achievement
+     nudge: if a new stat's name closely matches an existing one, suggest
+     logging a new entry on the existing stat instead — non-blocking,
+     trust-first.
+   - No safeguard proposed against backdating beyond the normal
+     trust-first default (PD-002) — this is low-stakes personal data with
+     no reward attached; adding friction here would defend against a
+     threat that currently has no payoff.
+6. **MVP version.** §8.5 as written: curated suggestion list plus
+   freeform creation, fast single-value entry logging, live-derived
+   personal-record and record-broken queries, no XP linkage, no
+   verification tier.
+7. **Possible future expansion.** Optional evidence/verification on a
+   `StatEntry` (mirroring achievement `VerificationLevel`) once
+   integrations like Strava/Apple Health can write entries automatically;
+   archive-without-delete for a stat a user wants to stop actively
+   logging but keep the history of; the stat-relative completion criteria
+   and achievement/Stat auto-linking both flagged as deferred in §8.4;
+   community-suggested stats beyond the fixed §8.5 list once real usage
+   shows what people actually track.
+
+---
+
+## 9. Seasons
+
+This section closes the second gap `ux-ui-designer` flagged while
+spec'ing the Charts screen (`docs/wireframes.md` §5a #10, §5c): the
+constitution describes seasons narratively but nothing defines season
+*boundaries* or what a `Season` needs to exist as an entity.
+
+### 9.1 Boundary definition — fixed calendar quarters, not named seasons
+
+**Decision: seasons are fixed Gregorian calendar quarters** (Q1:
+Jan–Mar, Q2: Apr–Jun, Q3: Jul–Sep, Q4: Oct–Dec), labeled plainly as "Q1
+2027" or an equivalent date-range label like "Jan–Mar 2027" (exact copy
+is `ux-ui-designer`'s call) — **never** as a named season like "Summer."
+
+**Reasoning.** The constitution's own worked example ("Summer 2027:
+4,750 XP earned...") is illustrative wording, not a settled requirement
+— the underlying ask is "periodically summarize recent progression,"
+which quarters satisfy exactly as well. Named seasons are
+Northern-hemisphere-coded: a Southern Hemisphere user's summer runs
+December–February, and users near the equator don't experience four
+meaningfully distinct seasons at all. Shipping "Summer 2027" globally
+would be quietly wrong for a large share of any real userbase, and
+fixing it correctly would mean asking or inferring every user's
+hemisphere just to label something cosmetic — disproportionate
+complexity and data collection for a display string. Fixed quarters are
+culturally neutral, need zero per-user configuration, are trivially
+computable from any date with no lookup table, and most people already
+have some intuitive sense of "quarters" from work, school, or finance
+regardless of where they live.
+
+### 9.2 No stored, mutable "season score" — computed on demand
+
+**Decision: no new mutable table.** Everything the Charts screen's
+Seasonal Comparisons card needs — XP earned in-season, achievements
+completed, strongest category, largest achievement, new personal
+records — is computed on demand from data that already exists and is
+already timestamped:
+
+- **XP earned in-season / strongest category:** `SUM(xp_ledger.amount)`
+  filtered to `granted_at` within the quarter's date range, grouped by
+  `category` for "strongest."
+- **Achievements completed in-season:** count of
+  `UserAchievementInstance` rows filtered to `completedAt` within range.
+- **Largest achievement:** the single completed achievement in-range
+  with the highest `xpValue`.
+- **New personal records:** §8.3's record-broken derivation, filtered to
+  `recordedAt` within the quarter's range.
+
+This directly matches the constitution's own distinction — "Competitive
+seasonal scores may reset. Lifetime progression does not reset" — but
+that sentence describes a **leaderboard** concept (a running competitive
+score zeroed out at a season boundary), which doesn't exist yet
+(Friends/Leaderboards are `BACKLOG.md` LATER). The Charts screen's
+Seasonal Comparisons card is a **personal retrospective**, not a
+competitive score: it's a `WHERE granted_at BETWEEN ...` query,
+recomputed identically every time it's viewed, forever. There is nothing
+to "reset" because nothing is stored as a running total in the first
+place — reset semantics only become a real design question once an
+actual competitive, persisted season score exists for leaderboards, and
+that's out of scope here, per both the "avoid premature scaling"
+principle and this task's instruction to prefer the simplest option that
+satisfies the Charts screen's actual current need.
+
+**Flag for `app-engineer` / future coordination:** when Friends/
+Leaderboards are eventually built, a persisted, resettable "season
+score" row will very likely be needed then — a leaderboard needs a
+stable, cheap-to-query, point-in-time snapshot rather than recomputing a
+live aggregate across every participant on every render — but that's a
+leaderboard-specific problem to solve when leaderboards are real, not
+something to speculatively build now on the strength of a Charts-screen
+card that has no such requirement.
+
+### 9.3 No season-definitions table — boundaries are a pure function of the calendar
+
+**Decision: no table at all.** A season's start/end/label needs no
+stored row — it's fully computable from a fixed rule given any date:
+`quarter = ((month − 1) ÷ 3) + 1`; start = the first day of that
+quarter's first month; end = the day before the next quarter's start.
+This works for any past or future date with zero migration, zero seed
+data, and no risk of a table and the rule ever disagreeing with each
+other. This matches the domain model's existing bias against
+unnecessary tables/rows elsewhere (`notDiscovered` having no database
+row per §1.4; computed rarity replacing a stored placeholder per §5) — a
+`season_definitions` table would only earn its keep if season boundaries
+ever needed to be something other than a fixed calendar rule (e.g., a
+marketing-driven custom competitive window with a hand-picked label or
+non-quarter-aligned dates for a future leaderboard event). That's a real
+possible future need, not a present one — add the table then, if and
+when it's needed.
+
+### 9.4 Required write-up: Seasons
+
+1. **User problem.** Lifetime totals are satisfying but flatten time — a
+   user can't easily answer "how did the last few months actually go?"
+   without a bounded, recent window to look back on.
+2. **Mechanic.** A season is a fixed calendar quarter — no stored entity
+   at all, computed from any date (§9.1, §9.3). The Seasonal Comparisons
+   card is a set of on-demand aggregate queries over already-timestamped
+   `xp_ledger` / `UserAchievementInstance` / `StatEntry` rows, filtered
+   to that quarter's date range (§9.2).
+3. **Why it works.** Zero new schema, zero reset logic, zero risk of a
+   stored aggregate drifting from the source data it summarizes — the
+   same correctness argument §8.3 makes for deriving personal records
+   live rather than caching them. Fixed quarters need no per-user
+   configuration and work identically for every user regardless of
+   hemisphere.
+4. **Possible unintended behavior.**
+   - A user near a quarter boundary might feel an arbitrary cliff ("I'd
+     have had a great Q3 if this counted") — a framing risk, not a data
+     problem.
+   - Framing seasons competitively before Friends/Leaderboards exist
+     could accidentally imply a competition that isn't there yet.
+5. **Proposed safeguards.** Present the card as a retrospective summary
+   ("here's what your last quarter looked like"), never as a countdown,
+   deadline, or "time's running out" framing — no manufactured urgency,
+   per the constitution. The underlying data model deliberately implies
+   nothing competitive (§9.2); exact copy is `ux-ui-designer`'s call,
+   flagged here so the data model doesn't accidentally suggest a
+   competitive framing it doesn't yet support.
+6. **MVP version.** §9.1–§9.3 as written: quarter-boundary computation,
+   five on-demand aggregate queries, no new tables, no reset logic,
+   rendered in the Charts screen's existing Seasonal Comparisons
+   placeholder slot (`docs/wireframes.md` §5a #10).
+7. **Possible future expansion.** A persisted, resettable competitive
+   season score once Friends/Leaderboards exist (§9.2); a
+   `season_definitions` table if/when boundaries need to be something
+   other than a fixed calendar quarter (§9.3); a summary notification
+   recapping a season at its close — flagged explicitly as something to
+   run through the Product Test before building, since a poorly designed
+   version of this could easily slide into exactly the guilt/urgency
+   mechanics the constitution forbids.

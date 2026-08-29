@@ -1293,14 +1293,23 @@ time-ranged — each card's subtitle says "· now" rather than a date range)
    (e.g. "5K Questline · 3 of 6"). *Ready today* — derives from
    `questSlotType`, `state`, `questChainId`, and `questChainPosition`, all
    already in `domain-model.md` §1.2.
-9. **Personal Record History.** *Blocked, not ready.* Shown as a "Coming
-   soon" placeholder at MVP — see §5c for why and what's needed before
-   this can be designed as more than a stub.
+9. **Personal Record History.** *No longer blocked on data modeling* —
+   `docs/domain-model.md` §8 now specs a `Stat`/`StatEntry` entity pair
+   with live-derived personal records and record-broken events. Still
+   shown as "Coming soon" at MVP because the schema doesn't exist in any
+   database yet (no Supabase project, `BACKLOG.md` NEXT) and this
+   section's own drill-in layout (per-stat chart, record-broken markers)
+   hasn't had its dedicated UX pass — see §5c for the updated readiness
+   note.
 
 **Group D — Comparative**
 
-10. **Seasonal Comparisons.** *Blocked, not ready.* Shown as a "Coming
-    soon" placeholder at MVP — see §5c.
+10. **Seasonal Comparisons.** *No longer blocked on data modeling* —
+    `docs/domain-model.md` §9 defines season boundaries as fixed calendar
+    quarters (no named seasons, no stored `Season` entity, no mutable
+    season-score table) and specs this card as five on-demand aggregate
+    queries over existing timestamped data. Still shown as "Coming soon"
+    at MVP because no database exists yet to query — see §5c.
 11. **Friend Comparison.** *Not rendered at all* at MVP — see §5b.
 
 ### 5b. Friend Comparison: why hidden entirely, not shown empty
@@ -1385,24 +1394,31 @@ decision):**
   exact formula. A default is proposed in §5a #6; needs
   `product-designer` sign-off before `app-engineer` builds the query.
 
-**Blocked — needs real schema/design work before this doc's stub
-placeholder can become a real section:**
-- **Personal Record History (#9).** Nothing in `domain-model.md` models a
-  "stat" as its own entity with a value history — only a achievement's
-  own current `progressValue`, which isn't the same thing (a personal
-  record needs "what was my best value, and when did each record get
-  broken," across a stat that may not be tied to any single achievement
-  at all, e.g. "fastest mile" independent of any specific quest). This is
-  real product-design work for `product-designer` (a `Stat`/
-  `PersonalRecordEvent`-shaped entity, most likely), not something this
-  wireframe should invent. Ships as a "Coming soon" card until that
-  exists.
-- **Seasonal Comparisons (#10).** The constitution describes seasons
-  narratively ("Summer 2027: 4,750 XP earned...") but nothing anywhere
-  defines season boundaries (calendar quarters? fixed named seasons?
-  rolling windows?) or a `Season` entity to key a comparison against. Also
-  `product-designer` work, not `ux-ui-designer`'s to invent. Ships as a
-  "Coming soon" card until boundaries are defined.
+**Product-design work now done — no longer blocked on a missing data
+model, but still not renderable as more than a "Coming soon" card until
+the schema is actually deployed:**
+- **Personal Record History (#9).** `docs/domain-model.md` §8 now specs
+  a `Stat` entity (user-scoped name/unit/comparison-direction) and a
+  `StatEntry` history table, with the current personal record and
+  "record broken" events both derived live from that history (no extra
+  stored event table). Query pattern is specified; no new schema beyond
+  those two tables. Remaining blockers: (1) no Supabase project exists
+  yet to hold the tables at all (`BACKLOG.md` NEXT, same blocker as the
+  rest of the schema), (2) this section's actual on-screen layout
+  (per-stat drill-in, how record-broken moments are marked on a chart)
+  still needs its own `ux-ui-designer` pass — §8 deliberately specs data
+  only, not screen layout. Ships as "Coming soon" until both are done.
+- **Seasonal Comparisons (#10).** `docs/domain-model.md` §9 resolves
+  season boundaries as fixed Gregorian calendar quarters (Q1–Q4, chosen
+  explicitly over named seasons like "Summer" for a global,
+  hemisphere-agnostic userbase) with **no stored `Season` entity and no
+  mutable season-score table** — every figure this card needs is an
+  on-demand aggregate query over already-timestamped `xp_ledger` /
+  `UserAchievementInstance` / `StatEntry` rows for the quarter's date
+  range. Remaining blocker is the same as #9: no live database yet. A
+  persisted, resettable season-score table is explicitly *not* needed for
+  this card — §9 flags that as a separate, later need once
+  Friends/Leaderboards are real.
 - **Friend Comparison (#11).** Blocked on the entire Friends feature
   (`BACKLOG.md` LATER) — not rendered at all, per §5b.
 
@@ -1463,12 +1479,13 @@ For the founder / for coordination with `product-designer` and
    presence anywhere else in the app yet is closer to a
    roadmap/expectations call than a screen-design one, so I defaulted to
    "absent" rather than deciding that for you.
-9. **Personal Record History and Seasonal Comparisons need real schema
-   design** before they can be more than the "Coming soon" placeholder
-   §5a/§5c describes — flagged for `product-designer`: a
-   `Stat`/personal-record-history entity (independent of any single
-   achievement's `progressValue`) and a `Season` boundary definition,
-   respectively. Neither is invented in this doc, per this task's scope.
+9. **Personal Record History and Seasonal Comparisons — resolved.**
+   `docs/domain-model.md` §8 (`Stat`/`StatEntry`, live-derived personal
+   records) and §9 (fixed calendar-quarter seasons, no stored `Season`
+   entity, no mutable season-score table) now spec both entities. They
+   remain "Coming soon" cards purely because no live database exists yet
+   to hold the schema (`BACKLOG.md` NEXT) — see the updated §5a #9/#10
+   and §5c.
 10. **XP ledger column completeness — resolved.** The `xp_ledger` table in
     `backend/supabase/migrations/20260829000000_initial_schema.sql`
     already has everything #1/#4 need: `granted_at` (timestamp),

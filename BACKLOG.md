@@ -36,6 +36,20 @@
   seed rows for the three real MVP chains in
   `backend/supabase/seed/quest_chains.v1.json`. Same unverified caveat as
   the rest of the scaffold above — no Swift/Xcode toolchain has run this.
+- Stats & Seasons domain model — `docs/domain-model.md` §8 (`Stat`/
+  `StatEntry` entities, live-derived personal records and record-broken
+  events, no new stored event table) and §9 (Seasons defined as fixed
+  Gregorian calendar quarters, not named seasons; no stored `Season`
+  entity; no mutable season-score table — everything the Charts screen
+  needs is computed on demand from existing timestamped data). This
+  closes the two schema gaps `ux-ui-designer` flagged in
+  `docs/wireframes.md` §5a #9/#10 and §5c while designing Charts &
+  Analytics. Not yet implemented as actual Postgres tables/Swift types —
+  that's `app-engineer` work, same blocker as the rest of the schema (no
+  Supabase project exists yet). `docs/wireframes.md` §5a #9/#10, §5c, and
+  Open Questions #9 updated to reflect this is no longer blocked on
+  product design, only on database existence and (for Personal Record
+  History specifically) a dedicated `ux-ui-designer` screen-layout pass.
 
 M0 is otherwise complete. Blocked on the founder for: (1) verifying the
 scaffold on a Mac, (2) creating the real Supabase project so `app-engineer`
@@ -56,6 +70,12 @@ for device testing (not urgent — Simulator covers early M1 work).
 - Achievement completion
 - XP calculations
 - Category levels
+- Stats & Personal Records, Seasonal Comparisons (Charts screen): now
+  fully speced (`docs/domain-model.md` §8/§9) — implementable as soon as
+  the founder's real Supabase project exists (same blocker as
+  Authentication above). Personal Record History's on-screen drill-in
+  layout still needs a dedicated `ux-ui-designer` pass before that one
+  card can go past "Coming soon" even once the schema is live.
 - Meta-achievement evaluator: new engineering scope (not a
   `CompletionCriteria` extension) to support the 6 secret achievements
   proposed in `docs/seed-achievements.md` §5 — each depends on a user's
