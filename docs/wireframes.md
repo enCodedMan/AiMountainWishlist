@@ -1293,14 +1293,19 @@ time-ranged — each card's subtitle says "· now" rather than a date range)
    (e.g. "5K Questline · 3 of 6"). *Ready today* — derives from
    `questSlotType`, `state`, `questChainId`, and `questChainPosition`, all
    already in `domain-model.md` §1.2.
-9. **Personal Record History.** *No longer blocked on data modeling* —
-   `docs/domain-model.md` §8 now specs a `Stat`/`StatEntry` entity pair
-   with live-derived personal records and record-broken events. Still
-   shown as "Coming soon" at MVP because the schema doesn't exist in any
-   database yet (no Supabase project, `BACKLOG.md` NEXT) and this
-   section's own drill-in layout (per-stat chart, record-broken markers)
-   hasn't had its dedicated UX pass — see §5c for the updated readiness
-   note.
+9. **Personal Record History.** *No longer blocked on data modeling or
+   screen design.* `docs/domain-model.md` §8 specs the `Stat`/`StatEntry`
+   entity pair with live-derived personal records and record-broken
+   events; **§5d below is the dedicated UX pass this card and its
+   drill-in needed** — inline card layout, an all-stats list, a per-stat
+   chart with record-broken markers visually distinguished from ordinary
+   points, and the create/log/edit/delete flows for a `Stat`'s history
+   (the one entity in this entire doc where past entries are genuinely
+   user-editable/deletable, unlike everywhere else "history is
+   permanent" — §5e). Still renders as a "Coming soon" card at MVP purely
+   because no Supabase project/live schema exists yet (`BACKLOG.md`
+   NEXT) — a build blocker now, not a design blocker. See §5c for the
+   updated readiness note and §5d/§5e for the full design.
 
 **Group D — Comparative**
 
@@ -1397,17 +1402,19 @@ decision):**
 **Product-design work now done — no longer blocked on a missing data
 model, but still not renderable as more than a "Coming soon" card until
 the schema is actually deployed:**
-- **Personal Record History (#9).** `docs/domain-model.md` §8 now specs
-  a `Stat` entity (user-scoped name/unit/comparison-direction) and a
+- **Personal Record History (#9).** `docs/domain-model.md` §8 specs a
+  `Stat` entity (user-scoped name/unit/comparison-direction) and a
   `StatEntry` history table, with the current personal record and
   "record broken" events both derived live from that history (no extra
   stored event table). Query pattern is specified; no new schema beyond
-  those two tables. Remaining blockers: (1) no Supabase project exists
-  yet to hold the tables at all (`BACKLOG.md` NEXT, same blocker as the
-  rest of the schema), (2) this section's actual on-screen layout
-  (per-stat drill-in, how record-broken moments are marked on a chart)
-  still needs its own `ux-ui-designer` pass — §8 deliberately specs data
-  only, not screen layout. Ships as "Coming soon" until both are done.
+  those two tables. **The on-screen design pass is now done** — see §5d
+  (inline card, all-stats list, per-stat drill-in with record-broken
+  markers) and §5e (create/log/edit/delete, including the entry-level
+  mutability divergence from the rest of this doc). The only remaining
+  blocker is that no Supabase project exists yet to hold the tables
+  (`BACKLOG.md` NEXT, same blocker as the rest of the schema) — this is
+  now purely a build blocker, not a design blocker. Ships as a "Coming
+  soon" card until the schema is live.
 - **Seasonal Comparisons (#10).** `docs/domain-model.md` §9 resolves
   season boundaries as fixed Gregorian calendar quarters (Q1–Q4, chosen
   explicitly over named seasons like "Summer" for a global,
@@ -1421,6 +1428,476 @@ the schema is actually deployed:**
   Friends/Leaderboards are real.
 - **Friend Comparison (#11).** Blocked on the entire Friends feature
   (`BACKLOG.md` LATER) — not rendered at all, per §5b.
+
+---
+
+### 5d. Personal Record History — detail view
+
+This closes the two remaining flags on §5a #9 (§5c): the inline card's
+actual content, and the per-stat drill-in's layout — specifically how
+record-broken moments get visually marked. It also resolves the one place
+in this entire doc where a history is genuinely user-mutable, since
+`StatEntry` (unlike everything else specced so far) is explicitly
+editable/deletable by its owner (`docs/domain-model.md` §8.2) — §5e below
+designs that divergence deliberately rather than reusing this doc's
+default "history is permanent, editing isn't a first-class action"
+assumption.
+
+Consistent with the rest of this feature's quiet, personal-utility tone:
+no XP, no unlock ceremony, no rarity, no comparison to anyone else. A
+`Stat` is a private number a user tracks because they care about it, not
+a reward mechanic (`docs/domain-model.md` §8.4/§8.6).
+
+#### Navigation map
+
+- **Charts screen → Personal Records card** (§5a #9, in the main scroll)
+  — an always-current list of *every* `Stat` the user tracks (not a
+  curated subset), described below.
+- **Profile → Selected Stats module** (§4d) — the user's own curated
+  handful of featured stats. Tapping a featured stat tile **deep-links
+  directly into that stat's drill-in**, the same screen the Charts card
+  opens. Decision, stated explicitly: this reuses the "one canonical
+  screen, two entry points" pattern already established for the Full
+  Quest List (§4c) — Home's `See all quests` and Profile's `View all
+  quests` both land on one shared screen rather than forking into two
+  versions of the same list with two different truths. It would be a
+  real inconsistency for tapping "Fastest 5K: 24:12" on Profile to show
+  something different from tapping the same stat's row on the Charts
+  screen.
+- **Creating a new `Stat`** happens from the Charts card / all-stats list
+  (§5e.1) only. Profile's `Edit selected stats` picker (§4d) chooses
+  among stats that already exist; if opened with zero stats tracked yet,
+  it shows a single `+ Create a new stat` escape hatch that hands off to
+  the same creation flow rather than duplicating it. One system of
+  record for stats, one creation flow, referenced from two curation
+  surfaces.
+
+#### Primary user intent
+
+- **The inline Charts card:** a fast "what are my numbers right now, and
+  what's changed lately" glance — no deeper intent required. Most users
+  who open this card are checking one or two specific values, not
+  browsing.
+- **The per-stat drill-in:** understand how one specific measurement has
+  actually trended over time, see exactly when past records were broken,
+  and — the one place in this feature where the user takes real
+  mutating action — log a new value or correct a past one.
+
+#### Visual hierarchy
+
+**A. Personal Records card (Charts screen, §5a #9's actual content):**
+
+```
+┌───────────────────────────────┐
+│  PERSONAL RECORDS       · now  │
+│  Fastest 5K        24:12 ⚡    │
+│  Bench press max   185 lb      │
+│  Countries visited  9           │
+│  Longest run        14 mi      │
+│           + Track a stat        │
+├───────────────────────────────┤
+│  Newest record: Fastest 5K,     │
+│  Aug 14                          │
+└───────────────────────────────┘
+```
+
+- Title → subtitle ("· now", non-time-ranged, same convention as
+  Category Distribution/Completion Rate) → list → one-line takeaway,
+  matching this screen's standard per-card layout (§5 intro).
+- Each row: stat name (left) + current best value + unit (right). A
+  stat whose current record was set within the last 30 days gets a
+  small, quiet indicator next to the value (shown above as "⚡") — not a
+  badge, not a color change, just a small consistent glyph so a power
+  user scanning the list can tell what's fresh without a "New!" label
+  (see Deliberately NOT shown for why this stays understated).
+- Rows sorted by most-recently-updated stat first (latest
+  `StatEntry.recordedAt` across all entries for that stat, descending) —
+  the same "what changed" instinct as Home's Recent module (§2), applied
+  here as pure sort order rather than a separate module.
+- Capped at **6 rows inline**, the same cap already used for Trophy Case
+  (§4a) and Category Levels (§4b) — a user with 6 or fewer stats sees all
+  of them; more than 6 shows the top 6 plus `See all N stats →`.
+- `+ Track a stat` is always the last row/affordance, even under the
+  cap — mirrors the Trophy Case's empty-slot `+` (§4a), so creating a
+  stat never requires opening "See all" first.
+- Takeaway line: the single most recent record-broken moment across all
+  tracked stats ("Newest record: Fastest 5K, Aug 14"); if nothing's been
+  beaten recently, a neutral fallback ("4 stats tracked").
+- Tapping any stat row opens that stat's drill-in (below). Tapping `+
+  Track a stat` opens creation (§5e.1).
+
+**All-Stats list** (only appears once a user has more than 6 stats): a
+plain screen, same row treatment as the card but listing all N stats
+(same recency sort, same "⚡ recent record" indicator), a `+ Track a
+stat` row at the top, and no filter/sort controls beyond that — unlike
+the Full Quest List's Backlog filter (§4c), a stats list this small
+doesn't yet earn its own configuration surface; revisit if real usage
+shows otherwise. Tapping a row opens the same per-stat drill-in as
+everywhere else.
+
+**B. Per-stat drill-in:**
+
+```
+┌───────────────────────────────┐
+│  ← Fitness · Fastest 5K   •••  │
+│  30D  90D  1Y  [All]           │  ← local range, defaults All
+├───────────────────────────────┤
+│  CURRENT RECORD                │
+│  24:12                          │
+│  Set Aug 14, 2026                │
+├───────────────────────────────┤
+│      ○ ○ ◉ ○ ○ ◉ ○             │  ← ordinary vs. record-broken
+│  Improved 3 times over 14       │
+│  months, most recently Aug 14   │
+├───────────────────────────────┤
+│  HISTORY                        │
+│  ★ 24:12 · Aug 14, 2026         │
+│  PR 24:41 · Jun 2, 2026          │
+│    25:10 · Feb 20, 2026          │
+│  PR 26:04 · onboarding import    │
+│           [Log New Entry]        │
+└───────────────────────────────┘
+```
+
+1. **Header:** category tag + stat name (largest element, same
+   convention as Achievement Detail's name treatment, §3), overflow menu
+   (•••) for stat-level management (§5e.3).
+2. **Local range control** (30D / 90D / 1Y / All, default **All**) —
+   independent of the Charts screen's global range control, the same
+   relationship Achievement Detail's own chart drill-ins already have to
+   the main scroll (§5 Secondary actions: "a focused, full-screen
+   version of just that chart — finer time granularity").
+3. **Current record**, large, its own block — the single most important
+   number on the screen, the same visual register Home gives the Level
+   number (§2). Shows the live-derived best value + unit + the date it
+   was set. Framed as "current record" regardless of
+   `comparisonDirection` — never "current worst" or any confusing
+   phrasing for `atMost` stats.
+4. **Chart** — value-over-time line, x = `recordedAt`. **Orientation is
+   normalized so "improvement" always reads as "up," regardless of
+   `comparisonDirection`** — for an `atMost` stat (lower is better, e.g.
+   a 5K time), the y-axis is inverted so a faster time plots higher. A
+   literal, un-inverted plot of a shrinking time would visually read as
+   "decline," the opposite of what happened. One consistent rule ("up is
+   always good") applies to every stat regardless of direction, so a
+   power user scanning several stats never has to remember which ones
+   are inverted.
+5. **Record-broken markers**, visually distinct from ordinary points —
+   not color alone:
+   - **Ordinary entry:** small, filled, muted-tone dot.
+   - **Record-broken entry** (per `docs/domain-model.md` §8.3's live
+     derivation — strictly improves on the best value among all *prior*
+     entries): a **larger dot in the app's accent color with a thin
+     ring/halo around it.** Size + ring shape + color together, so the
+     distinction survives grayscale/color-blind rendering, not just a
+     palette swap.
+   - **The very first entry ever logged for a stat is never marked
+     record-broken**, even though it does become the stat's current
+     record by default — per §8.3's derivation, "improves on the best
+     value among all prior entries" has no prior entries to compare
+     against yet, so nothing was actually *broken*. It renders as an
+     ordinary point. (This is the precise reason a single-entry stat has
+     no record-broken moment — see Edge cases below.)
+   - **Ties don't count** (§8.3) — a repeat of the exact current-best
+     value renders as an ordinary point, not a second marker, so a
+     duplicate log never manufactures a hollow "you broke a record"
+     moment.
+   - Tapping any point shows a small callout: value + date
+     (record-broken points additionally read "New record" in the
+     callout) — the same "tap a point for detail" convention already
+     used on XP Over Time (§5a #1).
+6. **One-line takeaway** beneath the chart (per this screen's standard
+   card convention): e.g. "Improved 3 times over 14 months, most
+   recently Aug 14" — replaced entirely for the zero- and one-entry
+   states (Empty state below).
+7. **History list** — a plain, reverse-chronological list of every
+   `StatEntry`, always visible beneath the chart (not gated behind a
+   "View as table" toggle the way the rest of the Charts screen's
+   time-series sections require — see Accessibility). Each row: value +
+   unit, date, optional note, and a **live-derived status tag**: `★
+   Current record` on the one row that's the present best, `PR` on rows
+   that were a record-broken moment at some point but have since been
+   surpassed, no tag on ordinary rows. Tags recompute fresh on every
+   load/after any edit — never a cached label that could drift from the
+   underlying data (the same correctness principle §8.3 already
+   establishes for the derivation itself). Paginated — most recent ~20
+   rows, `Load more` beneath, rather than rendering a multi-year history
+   in one scroll.
+8. **`Log New Entry`** — single pinned primary button, always present
+   (see Primary action).
+
+#### Primary action
+
+- **Card:** none forced — same read-first stance as the rest of this
+  screen (§5 Primary action). Tapping a row is the natural next step but
+  nothing visually pushes toward it.
+- **Drill-in:** `Log New Entry`, pinned near the bottom for one-handed
+  reach, opens the fast quick-entry sheet (§5e.2) — mirrors Achievement
+  Detail's `Log Progress` pattern (§3, §8.5) exactly: a number pad, an
+  optional date (defaults today, editable), and an optional note. No
+  other fields. This is the single highest-frequency interaction on this
+  whole feature (§8.5) and must never grow past this.
+
+#### Secondary actions
+
+- **Card:** `See all N stats →` (past the 6-row cap), `+ Track a stat`
+  (create).
+- **Drill-in:** the local range control, tapping a chart point for its
+  callout, tapping a history row to edit it (§5e.2), swipe-to-delete on
+  a history row (§5e.2 — always paired with a non-swipe delete
+  affordance inside the edit sheet, the same "swipe is an accelerator,
+  never the only path" rule as onboarding/§1 and the Full Quest List/
+  §4c), and the overflow menu's `Edit stat details` / `Delete stat`
+  (§5e.3).
+
+#### Empty state
+
+Two genuinely distinct cases, never conflated:
+
+- **Zero stats tracked at all** (the card's own empty state). The
+  Personal Records card collapses to a single prompt, matching this
+  doc's established "one clear next step beats several sad empty boxes"
+  pattern (Profile §4, Home §2): `Track your first personal record →`,
+  opening creation (§5e.1) directly. No placeholder rows, no fabricated
+  "0" values.
+- **A stat exists but has zero entries yet** (e.g., just created from a
+  suggestion or freeform, before the first value is ever logged). This
+  is a stat-level state, not a card-level one: on the card, the row
+  still appears (the user did create it) but shows `No entries yet` in
+  place of a value rather than a fake "0." Tapping it opens the
+  drill-in, which itself shows no chart and no "current record" block —
+  instead one plain prompt, `Log your first entry`, directly above the
+  same pinned `Log New Entry` button (the same "prompt instead of a fake
+  0%/flat line" rule Achievement Detail already uses for a measurable
+  achievement with no data yet, §3).
+
+#### Populated state
+
+As diagrammed above — a card with several stats sorted by recency, and a
+multi-year drill-in with a real trend line, several record-broken
+markers, and a paginated history.
+
+#### Edge cases
+
+- **Exactly one entry ever logged.** No record-broken moment exists yet
+  (nothing to beat, per §8.3) and a single point has no meaningful trend
+  to chart. Rather than render a line chart with one dot sitting oddly
+  on an axis — the same "looks broken, not just sparse" trap this
+  screen's parent already avoids (§5 Empty state) — the chart area is
+  replaced entirely with a plain, calm value display (the same large
+  "current record" treatment, just with no chart beneath it) and one
+  caption: `Log another entry to start tracking your trend.` The single
+  entry still appears normally in the history list below, taggable/
+  editable/deletable like any other row.
+- **Deleting or editing the entry that is currently the record.** See
+  §5e.2 — this is the one place this screen diverges from a simple
+  swipe-delete, and it's designed deliberately rather than left as an
+  oversight.
+- **Very long history (years, dozens-to-hundreds of entries, per
+  §8.3).** The chart's bucket granularity adapts to the selected local
+  range the same way the main Charts screen's time-series sections
+  already must (§5 Edge cases: "granularity adapts to range, never fixed
+  at daily regardless of span"); the history list paginates rather than
+  rendering everything at once.
+- **A past entry is edited/backdated after the fact.** Because
+  record-broken status is derived live, not stored (§8.3), correcting an
+  old entry's value or date can change which *other* entries are
+  currently tagged record-broken — a previously-marked point can lose
+  its ring, a previously-ordinary point can gain one. This is expected,
+  correct behavior given the derivation rule, not a bug to guard
+  against; both the chart and the history list simply reflect whatever
+  the current data implies on next render.
+- **A setback or "worse" value, honestly logged** (e.g. an injury, a
+  slower race). Renders as a perfectly ordinary point — no red coloring,
+  no "you got worse" framing, no negative visual treatment of any kind.
+  Only record-broken points ever get a distinct, positive visual
+  treatment; every other point is neutral, never judgmental — consistent
+  with the constitution's no-guilt principle applied to a screen that's
+  otherwise easy to accidentally moralize.
+- **Very long stat name or note.** Single-line truncation with an
+  expandable "more," consistent with every other screen in this doc —
+  never breaks the row layout or pushes `Log New Entry` off-screen.
+
+#### Accessibility
+
+- **The chart is never the only way to read this data** — the history
+  list beneath it is always visible (not hidden behind a "View as
+  table" toggle the way the rest of the Charts screen's time-series
+  sections require, §5 Accessibility) and carries the same
+  record-broken/current-record status as plain text tags, so a
+  VoiceOver user gets full parity without any extra interaction step.
+  This is a stronger baseline than the rest of the Charts screen, worth
+  calling out rather than leaving implicit.
+- Record-broken markers are distinguished by size + ring shape + color
+  together, never color alone (§5 Accessibility's standing rule,
+  reapplied here).
+- `Log New Entry`, the local range control, and every history-row action
+  are ≥44pt tap targets.
+- Swipe-to-delete always has a non-swipe equivalent (a delete affordance
+  inside the edit sheet) — the standing "swipe is an accelerator, never
+  the only path" rule (§1, §4c).
+- Dynamic Type: value/date/note text and history rows reflow; the chart
+  keeps a sensible minimum size and becomes horizontally scrollable
+  within its own card at extreme sizes rather than shrinking illegibly
+  (same rule as the rest of §5).
+- Reduce Motion: the chart's entrance is a static reveal, not a
+  line-drawing animation; the record-broken ring is a static shape
+  difference, not an animated pulse, so no information is lost when
+  motion is reduced.
+- The optional quiet haptic on logging a new record (§5e.2) respects the
+  system haptics setting, same as every other haptic in this doc.
+
+#### Deliberately NOT shown
+
+- **No XP, no achievement-style unlock ceremony, no "+XP" of any kind**
+  when a record is broken — per `docs/domain-model.md` §8.4/§8.6, Stats
+  carry no XP and grant no reward in v0.1. The record-broken marker is
+  the entire feedback; no sound, no full-screen takeover, no forced
+  share prompt is inserted into the logging flow itself — same restraint
+  principle as the Unlock Moment's "no forced share prompt," §3a.
+- **No rarity, percentile, or "better than X% of users" framing** on any
+  personal value — this is an explicitly personal utility, not a
+  competitive one, and mirrors §5's existing ban on cross-user averages
+  at this user scale.
+- **No verification tier / evidence badge** on a `StatEntry` — not part
+  of v0.1 (`docs/domain-model.md` §8.6 lists this as future expansion
+  only).
+- **No streak framing of any kind** — no "days since last logged," no
+  logging-frequency pressure. Nothing about consistency of *logging* is
+  measured or displayed; only the values themselves matter.
+- **No fabricated or interpolated data points** for a sparse history —
+  the one- and zero-entry states are handled with plain language (above),
+  never a smoothed or invented trend line.
+- **No global leaderboard or friend comparison** on this screen,
+  consistent with §5b — Friends doesn't exist yet anywhere in the
+  product.
+
+---
+
+### 5e. Managing a Stat — creation, logging, and the entry-editing divergence
+
+Everywhere else in this doc, "history is permanent" — a completed
+achievement stays in the record forever (hidden, at most, never edited
+or deleted); the XP ledger is explicitly append-only
+(`docs/domain-model.md` §3). `StatEntry` is the one deliberate exception:
+`docs/domain-model.md` §8.2 states plainly that a stat entry "carries no
+reward that needs an auditable undo path" and is "ordinary user-owned
+data" the owner may edit or delete directly. This section designs that
+divergence on purpose rather than silently reusing this doc's default
+assumptions.
+
+#### 5e.1 Creating a Stat
+
+Reached from the Personal Records card's `+ Track a stat` or the
+all-stats list's equivalent affordance (§5d Navigation map). Per
+`docs/domain-model.md` §8.5:
+
+- **A short curated suggestion list first** (Fastest 5K, Bench press
+  max, Countries visited, Net worth, etc. — the exact §8.5 list),
+  presented as a simple tappable list, not a grid or carousel — this is
+  a low-stakes, infrequent action and doesn't need discovery-surface
+  production value. Selecting one pre-fills name/category/unit/direction
+  in one tap; the user can still rename or change the unit before
+  saving.
+- **A `Create your own` option** sits at the bottom of the same list —
+  freeform name, category (one tap), unit (free text), direction
+  (`atLeast`/`atMost`, presented as a plain two-option choice with a
+  one-line example each, e.g. "Lower is better (a time)" / "Higher is
+  better (a weight, a count, an amount)"). Four fields, no required
+  description, no deadline — the same low-friction bar the constitution
+  sets for user-created achievements.
+- **Soft duplicate nudge** (§8.5/§8.6): if the entered name closely
+  matches an existing stat, a single non-blocking line suggests logging
+  a new entry on the existing stat instead, with a `Create anyway`
+  escape — never a hard block, consistent with the trust-first default
+  used everywhere else in this doc.
+- Creating a stat never triggers any celebration or ceremony — it's a
+  setup step, not an accomplishment.
+
+#### 5e.2 Logging, editing, and deleting an entry
+
+**Logging** (the default, highest-frequency path): the quick-entry sheet
+described in §5d Primary action — number pad, optional date (defaults
+today), optional note, `Save`. If the newly logged value is a genuine
+record-broken result (per the live derivation), the sheet dismisses into
+the drill-in with the new point already showing its marker, plus a
+single, quiet haptic tick (the same light haptic Achievement Detail uses
+for ordinary progress logging, §3 Accessibility — not the heavier unlock
+haptic) as the only acknowledgment. No animation flourish, no sound, no
+full-screen moment — consistent with §8.4/§8.6's "no reward attached."
+
+**Editing an existing entry:** tapping a history row opens the same
+quick-entry sheet, pre-filled with that row's value/date/note. Saving
+overwrites the row directly — no version history, no "edited" marker,
+matching §8.2's plain-mutable-data model.
+
+**Deleting an existing entry:** swipe-to-delete on a history row, or a
+`Delete entry` button inside the edit sheet (the required non-swipe
+equivalent, §5d Accessibility).
+
+**The deliberate divergence — two different consequence tiers, not one
+uniform delete/edit flow:**
+
+- **Mutating an entry that is *not* currently the stat's record:**
+  proceeds immediately. Deletion shows a brief, dismissible `Entry
+  removed · Undo` snackbar for a few seconds as a lightweight safety net
+  against a mis-swipe — this is a UI convenience (the delete is simply
+  held for a few seconds before it actually commits), not a stored
+  reversal record; it doesn't reintroduce any of the XP-ledger-style
+  immutability machinery §8.2 explicitly avoids. No confirmation dialog
+  — an edit or delete here has no effect beyond that one row.
+- **Mutating the entry that *is* currently the stat's live-derived
+  record** (deleting it outright, editing its value down, or editing its
+  date such that another entry becomes the new best) **requires an
+  explicit, one-line confirmation before it commits** — computed live
+  against the same derivation query, minus/with the pending change, so
+  the copy states the *actual* resulting value:
+  - *"This is your current record for Fastest 5K (24:12 · Aug 14).
+    Deleting it will change your record to 24:41 from Jun 2. Delete
+    anyway?"*
+  - *"...Deleting it will leave you with no record for this stat, since
+    it's your only entry. Delete anyway?"* (the one-entry case, §5d Edge
+    cases)
+  - Same pattern for an edit that would knock the entry out of first
+    place, worded as "update your record to..." instead of "delete."
+  - This directly reuses the confirmation language and reasoning already
+    established for hiding a trophy-case item (§4 Edge cases: "This is
+    in your trophy case — hiding it will remove it from there too.
+    Continue?") — same principle (warn before a non-obvious downstream
+    effect), same interaction weight (a single confirm/cancel, not a
+    multi-step flow), applied to the one place in this doc where the
+    downstream effect is "your personal record changes," not "your
+    public showcase changes."
+  - **Editing an entry so that it *newly becomes* the record** (an
+    upward correction that now beats the previous best) needs no
+    special confirmation — the change is purely additive, saves
+    immediately like any other edit, and simply moves the `★ Current
+    record` tag to that row on the history list.
+
+#### 5e.3 Editing or deleting a Stat itself
+
+Reached from the drill-in's overflow menu (•••), for the rarer,
+stat-level (not entry-level) actions:
+
+- **`Edit stat details`** — rename, recategorize, or change the
+  unit/direction after the fact. A low-frequency correction path (e.g.,
+  the user picked the wrong direction at creation), not exposed as a
+  prominent action.
+- **`Delete stat`** — a genuine, cascading hard delete
+  (`docs/domain-model.md` §8.1: "unlike a completed achievement... a
+  clean, unambiguous delete, not a soft-hide with lingering rows").
+  Because this removes the *entire* history at once — a meaningfully
+  bigger consequence than any single entry edit — it gets the strongest
+  confirmation on this screen: *"Delete 'Fastest 5K'? This removes all
+  12 logged entries permanently. This can't be undone."* Destructive-
+  styled `Delete` / `Cancel`, no snackbar-undo (a hard delete this size
+  isn't safely reversible with a timed snackbar the way a single-row
+  delete is).
+- If the deleted stat was currently featured in Profile's Selected Stats
+  module (§4d), that slot gracefully clears to an empty `+` rather than
+  a broken reference — same pattern already used for a deleted
+  user-created achievement referenced in the trophy case (§4 Edge
+  cases).
 
 ---
 
@@ -1485,7 +1962,12 @@ For the founder / for coordination with `product-designer` and
    entity, no mutable season-score table) now spec both entities. They
    remain "Coming soon" cards purely because no live database exists yet
    to hold the schema (`BACKLOG.md` NEXT) — see the updated §5a #9/#10
-   and §5c.
+   and §5c. **Personal Record History's screen design is now also fully
+   specced** — inline card, all-stats list, per-stat drill-in with
+   record-broken markers, and the create/log/edit/delete flows including
+   the entry-mutability divergence from the rest of this doc's "history
+   is permanent" pattern — see §5d/§5e. No further design work remains
+   for #9; the live database is its only remaining gap.
 10. **XP ledger column completeness — resolved.** The `xp_ledger` table in
     `backend/supabase/migrations/20260829000000_initial_schema.sql`
     already has everything #1/#4 need: `granted_at` (timestamp),
