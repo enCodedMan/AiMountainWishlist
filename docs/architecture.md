@@ -117,8 +117,12 @@ integration, or AI feature exists.
 Everything else in BACKLOG "NEXT"/"LATER" follows after M1 is real and
 used.
 
-## Founder inputs this milestone needs
+## Founder inputs this milestone needed — resolved
 
-See the chat message accompanying this document for the specific
-questions — recorded here once answered, per `PRODUCT_DECISIONS.md`
-convention.
+- App working name / bundle id, and MVP sign-in method scope — see
+  PD-004 and PD-005 in `PRODUCT_DECISIONS.md`.
+- Still outstanding, and only the founder can do these: create an Apple
+  Developer Program account (needed for device testing and eventual App
+  Store release) and create a Supabase project (needed before
+  app-engineer can wire up real auth/data — schema and app scaffolding
+  can proceed without it).
