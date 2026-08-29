@@ -7,6 +7,9 @@
 - Wireframe onboarding — `docs/wireframes.md`
 - Wireframe home — `docs/wireframes.md`
 - Wireframe achievement detail — `docs/wireframes.md`
+- Wireframe profile — `docs/wireframes.md` (flags a founder decision:
+  confirm deferring the profile public/private toggle to post-Friends,
+  structural DB field only for now, is right — see doc §4f)
 - Repo scaffold — `app/LifeAchievementCore` (domain types + XCTest
   coverage), `app/project.yml` (XcodeGen), first Supabase migration at
   `backend/supabase/migrations/`. **Written but unverified** — no
@@ -20,11 +23,11 @@ for device testing (not urgent — Simulator covers early M1 work).
 
 # NOW
 
-- Profile screen wireframe (flagged as out of scope by
-  `docs/wireframes.md`'s M0 pass — needed before Profile is built)
 - Expand seed achievement library content beyond the ~35 worked examples
   in `docs/domain-model.md` §3.2, toward a real MVP-sized built-in
-  library across the six seeded categories
+  library across the six seeded categories (in progress)
+- Charts/Analytics screen wireframe (flagged as out of scope by the
+  Profile pass — needed before `app-engineer` builds it)
 
 # NEXT
 
