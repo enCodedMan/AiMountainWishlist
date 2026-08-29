@@ -45,6 +45,10 @@ to conflict.
 
 ## Subagents available in `.claude/agents/`
 
+- **lead-engineer** — default entry point for anything non-trivial: plans
+  the work, delegates narrowly-scoped tasks to the specialists below,
+  reviews their output, and integrates it. Route cross-cutting or
+  ambiguous-scope work here first.
 - **product-guardian** — gate-checks features/mechanics against the
   Product Test and philosophy; flags what needs founder sign-off.
 - **ios-engineer** — SwiftUI screens, view models, navigation, local
@@ -55,5 +59,6 @@ to conflict.
 - **motion-designer** — the achievement-unlock celebration, onboarding
   feel, animation/haptics spec.
 
-Reach for the specialized subagent when a task is squarely in its lane
-instead of doing it inline.
+For a small task squarely inside one specialist's lane with no
+cross-cutting risk, go straight to that specialist instead of routing
+through lead-engineer.
