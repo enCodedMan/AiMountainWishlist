@@ -10,6 +10,14 @@
 - Wireframe profile — `docs/wireframes.md` (flags a founder decision:
   confirm deferring the profile public/private toggle to post-Friends,
   structural DB field only for now, is right — see doc §4f)
+- Wireframe Charts & Analytics — `docs/wireframes.md` §5 (single
+  continuous scroll + sticky range/jump controls, not tabs; Friend
+  Comparison hidden entirely at MVP rather than shown empty, since
+  Friends has zero presence anywhere in the app yet — see doc §5b, flagged
+  for founder confirmation. Personal Record History and Seasonal
+  Comparisons ship as honest "Coming soon" cards, blocked on
+  `product-designer` schema work — see doc §5c — the rest of the screen's
+  sections build from data `domain-model.md` already specifies)
 - Seed achievement library v1 — `backend/supabase/seed/achievements.v1.json`
   (107 built-in achievements), `docs/seed-achievements.md`. Not yet
   loaded into any database (no Supabase project exists yet) or decoded
@@ -36,8 +44,7 @@ for device testing (not urgent — Simulator covers early M1 work).
 
 # NOW
 
-- Charts/Analytics screen wireframe (flagged as out of scope by the
-  Profile pass — needed before `app-engineer` builds it)
+(empty — both items that were here have moved to DONE above)
 
 # NEXT
 

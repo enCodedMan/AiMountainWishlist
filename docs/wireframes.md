@@ -1,4 +1,4 @@
-# Wireframes — Onboarding, Home, Achievement Detail, Profile
+# Wireframes — Onboarding, Home, Achievement Detail, Profile, Charts & Analytics
 
 Status: **draft spec** for M0 (`BACKLOG.md` NOW). Owned by `ux-ui-designer`.
 This is information architecture and interaction structure, not a visual
@@ -924,6 +924,490 @@ the one I'd ship absent objection.
 
 ---
 
+## 5. Charts & Analytics
+
+This is the destination for Profile's `View all stats` link (§4d) — the
+one screen in this doc that is **deliberately power-user territory**, not
+a "simple surface" screen. The constitution says it directly: "A casual
+user should never need to look at these. A power user should be able to
+spend significant time exploring them." Every other screen in this doc is
+graded on how little a casual user has to see; this one is graded on how
+much a power user finds worth staying for, subject to exactly one
+constraint carried over from the rest of the app — **nothing here is ever
+required to understand the rest of the product.** A user who never opens
+this screen loses no comprehension of their level, quests, or profile.
+
+Reached from exactly one place at MVP: Profile → `View all stats`. There
+is no tab-bar entry and no other entry point — this keeps the three-tab
+IA (§ intro) intact and keeps this screen firmly one deliberate tap below
+the surfaces a casual user actually lives in.
+
+### Primary user intent
+
+- **Casual user (the expected case: never opens this screen).** Nothing
+  is lost. This is the explicit design bet the whole screen makes.
+- **Casual user who taps in out of curiosity.** Should be able to glance
+  at the first section or two, understand it immediately (plain charts,
+  plain labels, no jargon), and leave without feeling they've entered a
+  spreadsheet or a "real" analytics product. Nothing above the fold should
+  intimidate.
+- **Power user.** Wants to go deep: look at trends over years, compare
+  categories, find personal records, see rarity, and generally treat this
+  as their own life's dashboard. This user should be able to spend real
+  time here and keep finding legible, well-organized structure rather
+  than a wall of numbers.
+
+### Structure decision: one continuous scroll, not tabs
+
+Chosen over a tabbed/segmented-control screen for three reasons:
+
+1. **Discovery over navigation.** A power user exploring "significant
+   time" (constitution's own phrase) benefits from serendipitously
+   scrolling past a section they weren't looking for (e.g., landing on
+   Achievement Calendar while looking for XP Over Time) the way a
+   Steam/Xbox stats page works. Tabs hide everything except the active
+   tab, which optimizes for someone who already knows exactly what they
+   want — the wrong optimization for a screen whose whole point is
+   exploration.
+2. **No hidden state to lose.** Tabs mean scroll position and range
+   selection reset or fork per tab, and "which tab was I on" becomes a
+   thing to restore on return. A single scroll has one position, one set
+   of controls, and behaves predictably with the back button — simpler to
+   build and simpler to reason about, consistent with the agent brief's
+   "avoid... cluttered dashboards."
+3. **It still satisfies "individually titled sections a casual visitor can
+   parse quickly."** Each section is its own titled card with its own
+   internal logic — a user can read exactly one card and stop, exactly
+   like reading one paragraph of a long article, without needing tab
+   context to make sense of it.
+
+The one navigation aid that *is* included: a slim, sticky **jump-chip
+row** directly under the range control (see diagram) — horizontally
+scrollable pill buttons ("XP," "Activity," "Categories," "Records,"
+"Rarity," "Quests," "Seasons") that smooth-scroll the page to that
+section. This is a scroll-position shortcut, not a tab switch — nothing
+is hidden, nothing unmounts, it just saves a returning power user from
+scrolling past ten cards to reach the one they check weekly.
+
+A second, **global sticky range control** (`30D · 90D · 1Y · All`) sits at
+the very top, under the nav bar, and governs every time-series section at
+once (XP Over Time, Achievements Completed Over Time, Achievement
+Calendar, Category Level Changes, Quest Completion trend). One control
+instead of eleven separate per-chart pickers is the load-bearing
+simplicity decision on an otherwise information-dense screen — sections
+that aren't inherently time-ranged (Category Distribution, Rarity
+Distribution, Completion Rate, Personal Records) ignore it and show
+current/lifetime standing instead, and say so in their subtitle so it's
+never ambiguous which sections respond to the control.
+
+**No dashboard customization in v1** — section set and order are fixed,
+not user-configurable (no drag-to-reorder, no show/hide toggle per
+section). This is a deliberate constraint even on the power-user screen:
+richness comes from depth *within* each section, not from turning the
+screen itself into a configuration surface — consistent with the agent
+brief's "avoid... endless configuration screens."
+
+### Visual hierarchy (top to bottom)
+
+```
+┌───────────────────────────────┐
+│  ← Charts & Analytics          │
+├───────────────────────────────┤
+│  30D   90D   [1Y]   All        │  ← sticky global range control
+├───────────────────────────────┤
+│  XP · Activity · Categories ›  │  ← sticky jump-chip row (scrolls)
+├───────────────────────────────┤
+│  XP OVER TIME          Σ / Δ   │
+│     ╱‾╲___╱‾‾‾‾‾╱               │
+│  6,140 XP this year             │
+├───────────────────────────────┤
+│  ACHIEVEMENTS COMPLETED         │
+│  ▁▂▃▅▂▇▃▂▅▆▃▂                   │
+│  38 completed this year         │
+├───────────────────────────────┤
+│  ACHIEVEMENT CALENDAR           │
+│  ▪▪▫▪▫▫▪▫▪▪▫▪▫▪▫▪▪▫▪▫▪          │
+├───────────────────────────────┤
+│  CATEGORY LEVEL CHANGES         │
+│  Adventure ╱‾╱‾‾  Fitness ╱‾    │
+├───────────────────────────────┤
+│  CATEGORY DISTRIBUTION  · now   │
+│  ◔  Adventure 34% · Fitness 22%│
+├───────────────────────────────┤
+│  COMPLETION RATE        · now   │
+│  82% · 38 of 46 ever started    │
+├───────────────────────────────┤
+│  ACHIEVEMENT RARITY     · now   │
+│  ▓▓▓▓░░░  mostly Provisional    │
+├───────────────────────────────┤
+│  QUEST COMPLETION               │
+│  Main ●●● · Side ●●●○○ · chains │
+├───────────────────────────────┤
+│  PERSONAL RECORDS   Coming soon │
+├───────────────────────────────┤
+│  SEASONAL COMPARISON Coming soon│
+└───────────────────────────────┘
+   (Friend Comparison does not
+    render at all — see §5b)
+```
+
+Every card follows the same internal layout: **title** (top-left) →
+**scope subtitle** (e.g. "Last 12 months" or "· now", top-right, always
+present so a user never has to guess whether the global range applies) →
+**chart** → **one-line plain-language takeaway** beneath it (e.g. "6,140
+XP this year, up from 3,900 last year") so the chart is never presented
+without a legible headline number for a reader who wants the gist without
+parsing the visualization itself.
+
+### Primary action
+
+Same as Profile (§4): there isn't one forced primary action, and that's
+intentional — this is a read-and-explore screen, not a task screen. The
+closest thing to a primary action is whichever card a given user came to
+check, and the range control / jump chips exist purely to get there
+faster, not to funnel toward a specific outcome.
+
+### Secondary actions
+
+- Tap the range control to change scope for all time-series sections at
+  once.
+- Tap a jump chip to scroll to that section.
+- Tap any time-series card (XP Over Time, Achievements Completed Over
+  Time, Achievement Calendar, Category Level Changes) to open a focused,
+  full-screen version of just that chart — finer time granularity,
+  tap-to-inspect individual data points (e.g., tapping a bump in XP Over
+  Time shows "Sub-25 5K · +250 XP · Aug 14"), and a `View as table` toggle
+  that exists specifically for the accessibility case described below,
+  not buried as a hidden feature.
+- Inline per-card toggles where a real second view is useful and cheap:
+  XP Over Time (`Σ` cumulative vs. `Δ` per-period), Achievements Completed
+  Over Time (stacked-by-category on/off).
+- Tap a category in Category Distribution or Category Level Changes to
+  isolate/highlight just that category's line or slice (dims the rest);
+  tap again to restore all.
+
+### Empty state
+
+There is a meaningful difference between "this user has almost no data
+yet" and "this feature doesn't exist for anyone yet," and the screen
+treats them differently on purpose (see §5b for the full reasoning):
+
+- **New/light user, sparse but real data.** Every section that has *any*
+  underlying concept still renders, with a calm, specific empty/sparse
+  message in place of a chart that would otherwise be a flat, discouraging
+  line at zero — e.g. XP Over Time shows "Keep completing achievements to
+  see your trend" instead of a flat 0 line; Achievement Calendar shows an
+  all-empty grid with a single caption rather than looking broken. This
+  matches the principle that a deliberately-entered power-user screen
+  should never look buggy to a new visitor, even though it will look
+  short.
+- **Features with zero product capability today (Friend Comparison).**
+  Hidden entirely — not rendered, not teased. See §5b for why this is
+  categorically different from "sparse data."
+- **Features that are promised but schema-blocked (Personal Records,
+  Seasonal Comparisons).** Shown as a small, honest, non-interactive
+  "Coming soon" card — title and one sentence, no fake chart, no
+  fabricated numbers. See §5c for why these get a placeholder while
+  Friend Comparison doesn't.
+
+### Populated state
+
+As diagrammed above — a multi-year power user scrolling through a fully
+populated version of every ready section, each with real trend lines,
+real distributions, and legible one-line takeaways.
+
+### Edge cases
+
+- **Zero data in the selected range** (e.g., a new account with `1Y`
+  selected). Per-section empty copy as above, not a blank/broken chart —
+  applies per-section, independent of whether other sections in the same
+  scroll have data.
+- **Very long history at `All` range.** Bucket granularity (daily → weekly
+  → monthly) must adapt automatically to the span so a multi-year line
+  chart never renders as an unreadable wall of daily noise. This is a
+  chart-rendering rule owned jointly with `app-engineer`, but the UX rule
+  — granularity adapts to range, never fixed at "daily" regardless of span
+  — belongs here.
+- **An "Undo completion" reverses a past data point** (`domain-model.md`
+  §1.4/§3.4). The XP ledger reversal must be reflected in every chart that
+  derived from it — the affected point/bar shrinks or disappears rather
+  than leaving a stale bump that no longer matches the user's real
+  history. Tapping a reversed point in the drill-in view can show
+  "Undone — no longer counted" for transparency rather than just quietly
+  vanishing.
+- **A quest-chain rung is auto-completed retroactively** (rungs 1–3
+  marked `completed` because the user directly completed rung 4, per
+  `domain-model.md` §4.4). Quest Completion and the Achievement Calendar
+  must reflect all of them at their real (backfilled) completion
+  timestamps, not show a confusing gap.
+- **`isHiddenFromProfile` items — resolved deliberately differently from
+  Profile.** Trophy Case, Rare Achievements, and Completed History (§4)
+  all *exclude* hidden achievements because those are public-facing
+  showcase surfaces. Charts & Analytics is never a public-facing surface
+  (there is no profile-visibility concept applied to this screen — see
+  §4f) — it is the user's own private view of their own true history. It
+  therefore **includes hidden achievements' data in every chart**,
+  otherwise "XP over time" summed across this screen would silently fail
+  to match the lifetime XP total shown at the top of the user's own
+  Profile, which would read as a bug, not a feature. Worth stating
+  explicitly since it's the one place this doc treats hidden items
+  differently than elsewhere.
+- **Very small absolute numbers** (e.g., one completion this month). Axis
+  scaling stays calm and consistent rather than auto-zooming to make "1"
+  visually dominate the card — a real product habit worth avoiding, since
+  exaggerating small numbers reads as manipulative gamification, not
+  honest reporting.
+- **A single achievement contributes to multiple sections at once** (e.g.
+  a Legendary-rarity chain-rung completion shows up in XP Over Time,
+  Achievement Calendar, Rarity Distribution, and Quest Completion
+  simultaneously). No section needs to cross-reference this explicitly;
+  each is independently correct because all of them read from the same
+  underlying instance/ledger data, not from each other.
+
+### Accessibility
+
+- **Every chart carries a text-equivalent, not just a visual one.**
+  VoiceOver reads the one-line plain-language takeaway beneath each chart
+  as that card's primary accessible description (e.g., "XP over time.
+  6,140 XP this year, up from 3,900 last year"), and the `View as table`
+  toggle available from every chart's drill-in view exposes the same
+  series as an ordinary accessible list/table — charts are never the only
+  way to access the underlying numbers.
+- **Dynamic Type at very large sizes.** Chart canvases keep a sensible
+  minimum size rather than being squeezed illegibly; card titles and
+  takeaway text reflow normally. At the largest accessibility sizes, a
+  card's chart may become horizontally scrollable within its own card
+  rather than shrinking to unreadable, but it never pushes into the next
+  card's space.
+- **Color.** All charts use a color-blind-safe palette and pair every
+  color-coded series (category lines, distribution slices) with a visible
+  text label — never color as the only means of distinguishing series,
+  consistent with every other screen in this doc.
+- **Reduce Motion.** Line-drawing / counting-up entrance animations are
+  replaced with the chart simply appearing in its final state; this is
+  purely cosmetic and never removes information, since the same data is
+  always available via the table view regardless of motion settings.
+- **Tap targets.** Range-control segments, jump chips, and per-card
+  toggles are all ≥44pt, same rule as every other screen in this doc.
+
+### Deliberately NOT shown
+
+- **No global leaderboards or public ranking.** Leaderboards are a
+  separate, not-yet-designed surface (`BACKLOG.md` LATER) — if/when they
+  ship, they get their own place, not a folded-in card here.
+- **No monetization/upsell messaging**, even though the constitution
+  lists "advanced analytics" and "enhanced historical analysis" as
+  candidate premium areas. This screen intentionally does not gate
+  anything by design — whether/how to gate any of it later is
+  `monetization-growth`'s call layered on top afterward, not something
+  baked into this wireframe (see Open Questions).
+- **No dashboard-building/configuration step.** No "choose your widgets"
+  setup wizard, no per-user rearranging — see the "no dashboard
+  customization" decision above.
+- **No fabricated or estimated data standing in for real data.** No
+  interpolated points before real history exists, and no rarity
+  percentage shown before an achievement crosses the 30-completion
+  threshold (`domain-model.md` §5) — Rarity Distribution shows honest
+  "mostly Provisional" framing rather than inventing precision the data
+  doesn't support yet.
+- **No comparison to a global "average user" aggregate**, even as a
+  substitute for Friend Comparison. With a handful of total users any such
+  average would be both statistically meaningless and potentially
+  identifying (the same reasoning `domain-model.md` §5 already applied to
+  raw rarity percentages) — this isn't a placeholder waiting for more
+  users, it's a permanent design stance until there's a userbase large
+  enough for an aggregate to mean anything and protect anonymity.
+- **No streak or "days active in a row" chart.** Even framed neutrally as
+  "analytics," this is the streak mechanic the constitution explicitly
+  forbids — excluded categorically, not just deprioritized.
+- **No "time spent in app" / session-count / open-frequency analytics.**
+  The product is a scoreboard for real life, not a screen-time dashboard;
+  surfacing app-usage metrics here would optimize for exactly the wrong
+  thing per the Product Test ("are we rewarding accomplishment or merely
+  app usage?").
+
+---
+
+### 5a. Section-by-section spec
+
+Grouped for scannability within the single scroll (group labels are a
+documentation convenience here, not rendered UI chrome — each card below
+is still its own independently titled section on-screen, per the
+"distinct, individually-titled sections" requirement).
+
+**Group A — Progression over time** (all governed by the global range
+control)
+
+1. **XP Over Time.** Line/area chart; `Σ` cumulative lifetime XP or `Δ`
+   XP earned per period (inline toggle). Tappable points show the
+   achievement that granted that XP. *Ready to build* once the XP ledger
+   table (`domain-model.md` §3.4) is confirmed to carry per-row timestamp
+   and category — see §5c.
+2. **Achievements Completed Over Time.** Bar chart, count per period,
+   optional stacked-by-category. *Ready today* — derives directly from
+   `UserAchievementInstance.completedAt`, no new schema.
+3. **Achievement Calendar.** GitHub-contributions-style heatmap grid, one
+   cell per day, shaded by completion count that day. *Ready today* —
+   same source as #2. Deliberately **not** framed as a streak — no
+   "current streak" number anywhere near it, just a density map of a
+   life, on purpose (see Deliberately NOT shown above).
+4. **Category Level Changes.** Multi-line chart, one line per **active**
+   category only (reuses the exact "active = any XP > 0" rule from §4b,
+   for consistency with Profile) — dormant categories never appear here
+   either, same reasoning as §4b. Tap a legend entry to isolate its line.
+   *Ready with the same ledger-timestamp dependency as #1*, plus a small
+   coordination question: is "level as of date T" computed live from
+   bucketed ledger totals, or from a periodic snapshot? Implementation
+   choice for `app-engineer`; either is fine as long as it's consistent
+   with the level formula in `domain-model.md` §3.3.
+
+**Group B — Composition & distribution** (current standing, not
+time-ranged — each card's subtitle says "· now" rather than a date range)
+
+5. **Category Distribution.** Donut or horizontal-bar breakdown of
+   lifetime XP share by category. *Ready today.*
+6. **Completion Rate.** A single prominent percentage plus its
+   denominator, e.g. "82% · 38 of 46 ever started." *Ready today*, but
+   the exact formula needs one confirmation (see §5c) — proposed default:
+   `completed ÷ (completed + abandoned-after-active + currently active)`,
+   counted only over achievements that ever reached `active`. This
+   deliberately excludes `interested`/backlog items that were never
+   started (declining to pursue a mere idea from the backlog isn't a
+   "failure" worth counting against the user) and excludes items still
+   sitting at bare `discovered`.
+7. **Achievement Rarity Distribution.** Simple bar/stack showing how many
+   of the user's completions fall in each rarity tier. *Ready to build
+   the UI today*, but the content itself will be thin for a long time by
+   design, not by bug — per `domain-model.md` §5, almost everything shows
+   `provisionalRarity` until an achievement crosses 30 distinct
+   completions app-wide, so this chart should show tiers honestly labeled
+   (including an explicit "Provisional" bucket) rather than implying more
+   precision than the underlying data currently supports.
+
+**Group C — Records & quests**
+
+8. **Quest Completion.** Compact status view: Main/Side slot fill (●●●
+   filled vs ○ empty, matching the Full Quest List's visual language from
+   §4c) plus completion-rate-over-time for quests specifically, and a
+   list of the user's quest chains with a rung-progress bar per chain
+   (e.g. "5K Questline · 3 of 6"). *Ready today* — derives from
+   `questSlotType`, `state`, `questChainId`, and `questChainPosition`, all
+   already in `domain-model.md` §1.2.
+9. **Personal Record History.** *Blocked, not ready.* Shown as a "Coming
+   soon" placeholder at MVP — see §5c for why and what's needed before
+   this can be designed as more than a stub.
+
+**Group D — Comparative**
+
+10. **Seasonal Comparisons.** *Blocked, not ready.* Shown as a "Coming
+    soon" placeholder at MVP — see §5c.
+11. **Friend Comparison.** *Not rendered at all* at MVP — see §5b.
+
+### 5b. Friend Comparison: why hidden entirely, not shown empty
+
+The task of designing this screen requires one explicit call: what
+happens to "friend comparison" when the user has zero friends, which is
+100% of users today (Friends is `BACKLOG.md` LATER, with no schema, no
+friends list anywhere else in the product).
+
+**Decision: the section does not render at all.** Not a greyed-out card,
+not an empty-state card, not a "coming soon" teaser. It is absent from
+the scroll and absent from the jump-chip row, exactly as if it didn't
+exist in this document's spec.
+
+This is a different treatment than the two other "not ready" sections
+(Personal Records, Seasonal Comparisons get an honest "Coming soon" card
+— §5c), and the distinction is deliberate, not inconsistent:
+
+- Personal Records and Seasonal Comparisons are **single-player concepts
+  that already exist elsewhere in the product's vocabulary** (Profile's
+  Stats module, Seasons as described narratively in the constitution) —
+  they're promised, partially implied, and blocked purely on a data model
+  that hasn't been designed yet. A "Coming soon" card is honest: the
+  feature is real, just not built.
+- Friend Comparison depends on an entire **social graph feature
+  (Friends) that has zero presence anywhere in the app** — no friends
+  list, no friend requests, no visibility model beyond the single-user
+  case (`domain-model.md` has no friends schema at all; `docs/wireframes.md`
+  §4f explicitly defers even the profile-visibility toggle). Teasing a
+  comparison feature for a social system that doesn't exist anywhere else
+  in the product would set an expectation the rest of the app can't back
+  up yet, and deciding whether/how to tease upcoming social features at
+  all is closer to a roadmap/marketing call than a screen-design one —
+  not something this wireframe should silently decide by including a
+  placeholder.
+
+This mirrors the pattern already used elsewhere in this doc for
+zero-data showcase modules (Home's Recent module when onboarding was
+skipped, Profile's Rare Achievements with zero rare completions, §2/§4e)
+— hide rather than show an empty box that reads as broken — applied here
+for an even stronger reason: it isn't just empty, the underlying concept
+doesn't exist in the product yet at all.
+
+**When Friends ships** (per `BACKLOG.md` LATER), this section reappears
+automatically with real content — but its actual design (head-to-head vs.
+category-relative vs. something else, consistent with the constitution's
+leaderboard priority of friends-first comparison) is explicitly **not**
+speced here and needs a dedicated pass coordinated with `product-designer`
+once Friends exists, the same way this whole screen needed its own pass
+rather than being squeezed into the Profile doc.
+
+### 5c. What's ready to build today vs. blocked — coordination flags
+
+No dedicated analytics/stats data model has been speced anywhere yet
+(`domain-model.md` only has "Life Statistics" as a loose narrative
+concept, plus `progressValue` as a single current value on
+`UserAchievementInstance` — not a time series). This section is explicit
+about which parts of §5a can be built from what already exists in
+`domain-model.md`, and which need real design work first — per this
+task's instruction, none of that missing data model is invented here —
+it's flagged back to `product-designer`/`app-engineer` instead.
+
+**Ready to build now, no new schema:**
+- Achievements Completed Over Time (#2)
+- Achievement Calendar (#3)
+- Category Distribution (#5)
+- Achievement Rarity Distribution (#7) — UI ready; content will be
+  naturally thin per `domain-model.md` §5, not a bug
+- Quest Completion (#8)
+
+**Ready to build now, confirmed against the live migration:**
+- XP Over Time (#1) and Category Level Changes (#4) — the `xp_ledger`
+  table already carries per-row `granted_at`, `category`, `amount`, and
+  the achievement/instance reference (so a reversal can be matched and
+  reflected — see Edge cases above). Confirmed directly against
+  `backend/supabase/migrations/20260829000000_initial_schema.sql`, no
+  schema change needed.
+
+**Ready with a small, low-risk coordination item (not schema, a product
+decision):**
+- Completion Rate (#6) needs one product decision, not new schema: the
+  exact formula. A default is proposed in §5a #6; needs
+  `product-designer` sign-off before `app-engineer` builds the query.
+
+**Blocked — needs real schema/design work before this doc's stub
+placeholder can become a real section:**
+- **Personal Record History (#9).** Nothing in `domain-model.md` models a
+  "stat" as its own entity with a value history — only a achievement's
+  own current `progressValue`, which isn't the same thing (a personal
+  record needs "what was my best value, and when did each record get
+  broken," across a stat that may not be tied to any single achievement
+  at all, e.g. "fastest mile" independent of any specific quest). This is
+  real product-design work for `product-designer` (a `Stat`/
+  `PersonalRecordEvent`-shaped entity, most likely), not something this
+  wireframe should invent. Ships as a "Coming soon" card until that
+  exists.
+- **Seasonal Comparisons (#10).** The constitution describes seasons
+  narratively ("Summer 2027: 4,750 XP earned...") but nothing anywhere
+  defines season boundaries (calendar quarters? fixed named seasons?
+  rolling windows?) or a `Season` entity to key a comparison against. Also
+  `product-designer` work, not `ux-ui-designer`'s to invent. Ships as a
+  "Coming soon" card until boundaries are defined.
+- **Friend Comparison (#11).** Blocked on the entire Friends feature
+  (`BACKLOG.md` LATER) — not rendered at all, per §5b.
+
+---
+
 ## Open questions
 
 For the founder / for coordination with `product-designer` and
@@ -967,8 +1451,42 @@ For the founder / for coordination with `product-designer` and
    silent, no-UI placeholder field is the right way to avoid shipping an
    inert toggle.
 7. **The Charts/Analytics screen referenced from Profile's `View all
-   stats`** (§4d) is real scope but was intentionally not wireframed in
-   this pass — it covers a lot of surface area (the constitution's full
-   analytics list) and deserves its own dedicated pass rather than being
-   squeezed in as a subsection here. Needed before `app-engineer` builds
-   that screen.
+   stats`** (§4d) — **resolved.** §5 above is that dedicated pass: one
+   continuous scroll of individually-titled sections (not tabs — see §5
+   for why), a single global range control, and an explicit readiness
+   split (§5c) between sections `app-engineer` can build now and the two
+   (Personal Records, Seasonal Comparisons) blocked on data model work
+   `product-designer` hasn't done yet.
+8. **Friend Comparison hidden entirely at MVP (§5b)** — for the founder:
+   confirm this reads as the right call versus, say, a "coming soon"
+   teaser. My reasoning is that teasing a social feature that has zero
+   presence anywhere else in the app yet is closer to a
+   roadmap/expectations call than a screen-design one, so I defaulted to
+   "absent" rather than deciding that for you.
+9. **Personal Record History and Seasonal Comparisons need real schema
+   design** before they can be more than the "Coming soon" placeholder
+   §5a/§5c describes — flagged for `product-designer`: a
+   `Stat`/personal-record-history entity (independent of any single
+   achievement's `progressValue`) and a `Season` boundary definition,
+   respectively. Neither is invented in this doc, per this task's scope.
+10. **XP ledger column completeness — resolved.** The `xp_ledger` table in
+    `backend/supabase/migrations/20260829000000_initial_schema.sql`
+    already has everything #1/#4 need: `granted_at` (timestamp),
+    `category`, `amount`, and both `achievement_definition_id` and
+    `user_achievement_instance_id` (so a reversal, or a drill-in tap, can
+    resolve back to the achievement that earned it). XP Over Time and
+    Category Level Changes can query this table directly — no schema
+    change needed, confirmed against the live migration rather than left
+    open.
+11. **Completion Rate's exact formula** (§5a #6) is given a proposed
+    default (`completed ÷ (completed + abandoned-after-active +
+    currently active)`, counted only over achievements that ever reached
+    `active`) but needs `product-designer` sign-off before `app-engineer`
+    builds the query against it.
+12. **Advanced-analytics monetization.** The constitution lists "advanced
+    analytics" and "enhanced historical analysis" as candidate premium
+    areas, and this screen is exactly where that would apply if it ever
+    does. §5 deliberately builds nothing gated and recommends no specific
+    gating — that tradeoff belongs to `monetization-growth` to evaluate
+    separately against user trust, not something this wireframe should
+    decide by default.
