@@ -1,12 +1,18 @@
+# DONE (M0)
+
+- Product specification v0.1 — `CLAUDE.md`, `docs/product-constitution.md`
+- Technical architecture — `docs/architecture.md`
+- Achievement domain model — `docs/domain-model.md`
+- XP/level model — `docs/domain-model.md`
+- Wireframe onboarding — `docs/wireframes.md`
+- Wireframe home — `docs/wireframes.md`
+- Wireframe achievement detail — `docs/wireframes.md`
+
 # NOW
 
-- Product specification v0.1
-- Technical architecture
-- Achievement domain model
-- XP/level model
-- Wireframe onboarding
-- Wireframe home
-- Wireframe achievement detail
+- Repo scaffold: Xcode project + `LifeAchievementCore` Swift package
+  (domain types + XCTest coverage) + first Supabase migration, matching
+  `docs/domain-model.md` (M0 step 3 in `docs/architecture.md`)
 
 # NEXT
 

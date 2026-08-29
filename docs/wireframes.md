@@ -330,9 +330,11 @@ outright.
      of 10 national parks visited," or "Current best: 26:04, target:
      sub-25:00").
 4. XP value and rarity, shown as a modest secondary row (e.g. "450 XP ·
-   Uncommon · 34% of users") — present because curious users look for it
-   here, but visually subordinate to the achievement itself, never
-   competing with the name for attention.
+   Uncommon" — no percentage until the achievement has enough real
+   completions to compute one honestly, per `docs/domain-model.md` §5) —
+   present because curious users look for it here, but visually
+   subordinate to the achievement itself, never competing with the name
+   for attention.
 5. Quest chain context, if applicable: "Part of the 5K Questline · Step 3
    of 6," with a compact chain strip; tapping opens the full chain view.
 6. Status controls (below).
@@ -449,9 +451,10 @@ tap-anywhere-to-dismiss at every point, never modal-locking the user in):
    haptic (a success-notification pattern, not just an impact tap), and
    this is the loudest treatment on the screen because a level-up is
    rarer and more significant than any single completion.
-6. **Rarity badge**, smallest, last, most skippable ("Uncommon · 41%
-   have this") — present for the power user who cares, easy to not
-   notice for the user who doesn't.
+6. **Rarity badge**, smallest, last, most skippable ("Uncommon," with a
+   percentage only once real computed rarity exists per
+   `docs/domain-model.md` §5) — present for the power user who cares,
+   easy to not notice for the user who doesn't.
 7. **Dismiss.** Tap anywhere, or it auto-settles on its own after a
    couple of seconds into the achievement's now-updated Completed detail
    screen. No forced "OK" button, no multi-step exit.
@@ -520,13 +523,16 @@ For the founder / for coordination with `product-designer` and
    (which 3 of the user's "Want to do" picks become default Main
    Quests) is left to `product-designer` — needs a concrete rule before
    `app-engineer` builds it.
-3. **Rarity data cold-start.** Pre-launch with "a handful of users" per
-   `CLAUDE.md`, real completion-rate rarity (e.g. "34% of users") will be
-   statistically meaningless at first. Recommend rarity display be
-   hidden or shown as a static/curated label until a minimum sample size
-   exists — needs a product-designer/app-engineer decision, flagged here
-   since it affects both the Detail screen and the unlock ceremony's
-   tiering logic (which currently assumes rarity tier is meaningful).
+3. **Rarity data cold-start — resolved.** `docs/domain-model.md` §5
+   confirms this: seed content carries a `provisionalRarity` label used
+   only for discovery-lane sorting, never shown to users as a fake
+   statistic; real computed rarity (with an actual "X% of users"
+   percentage) only replaces it once an achievement has 30+ distinct
+   completions. Below that threshold — true for nearly everything at
+   launch — the Detail screen and unlock ceremony should show the
+   provisional label plain (e.g. "Uncommon"), with no percentage
+   attached, rather than the "34% of users" framing this doc originally
+   sketched.
 4. **Category level list depth in Profile** (how many of the up-to-10
    categories show by default vs. behind a "show all") isn't speced
    here since Profile wasn't in scope for this milestone — will need its
