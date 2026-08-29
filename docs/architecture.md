@@ -94,6 +94,16 @@ aggregates, never hardcoded.
   gets manual verification via the Supabase CLI's local dev stack for
   now; revisit automated backend tests once those systems exist.
 
+**Note on this session's environment:** development sessions in this
+remote container have no Xcode/Swift toolchain (Linux, not macOS), so
+Swift/SwiftUI source written here is unverified until it's actually
+compiled. Per founder decision, `app-engineer` still writes the client
+code and tests here; the founder (or a session with real Xcode access)
+periodically runs `swift test` / opens the project in Xcode to confirm it
+builds, rather than blocking implementation on having a macOS session
+available. Flag this clearly whenever client code is delivered from this
+kind of session so "written" is never mistaken for "verified."
+
 ## Milestones
 
 **M0 — Foundation** (BACKLOG "NOW," in dependency order):
