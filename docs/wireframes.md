@@ -1,4 +1,4 @@
-# Wireframes — Onboarding, Home, Achievement Detail
+# Wireframes — Onboarding, Home, Achievement Detail, Profile
 
 Status: **draft spec** for M0 (`BACKLOG.md` NOW). Owned by `ux-ui-designer`.
 This is information architecture and interaction structure, not a visual
@@ -508,6 +508,422 @@ who've turned animation down.
 
 ---
 
+## 4. Profile
+
+Profile is the character sheet: "who am I, based on what I've actually
+done." Per the constitution's social philosophy this is **profile-first,
+not feed-first** — no activity feed, no comment threads, no algorithmic
+timeline (PD-003). At MVP there are no friends, so the Profile tab only
+ever shows **the signed-in user's own profile** — viewing another user's
+profile isn't a concept that exists yet.
+
+### Primary user intent
+
+Unlike the other three screens, Profile doesn't converge on one action —
+it's inherently browse-and-reflect, and that's deliberate, not a gap in
+the spec:
+
+- **Casual user:** a quick glance at overall level and the trophy case —
+  a moment of "look what I've done" — then leave. No deeper intent
+  required.
+- **Power user:** the entry point into everything the constitution calls
+  "deep system" — full quest management, category-by-category progress,
+  stat charts, complete history. Profile is where the app's depth lives,
+  precisely so Home doesn't have to carry it.
+
+Both users load the same screen. The casual user's version is short
+because their data is short — not because anything is hidden from them.
+
+### Structure (top to bottom, one screen, no dashboard grid)
+
+```
+┌───────────────────────────────┐
+│  [avatar]  Jordan               │
+│  Level 12 · 4,780 lifetime XP  │
+│  ▓▓▓▓▓▓▓▓░░  620 / 850 to Lv 13│
+├───────────────────────────────┤
+│  TROPHY CASE            Edit → │
+│  [Rainier] [Grad] [7 countries]…│
+├───────────────────────────────┤
+│  CATEGORY LEVELS               │
+│  Adventure   Lv 9   ▓▓▓▓▓▓▓░░  │
+│  Fitness     Lv 7   ▓▓▓▓▓░░░░  │
+│  Travel      Lv 6   ▓▓▓▓░░░░░  │
+│  Education   Lv 5   ▓▓▓░░░░░░  │
+│           Show all categories →│
+├───────────────────────────────┤
+│  QUESTS   3 Main · 4 Side · 11 Backlog │
+│  • Sub-25 5K              62%  │
+│  • Save $5,000             40% │
+│           View all quests →    │
+├───────────────────────────────┤
+│  STATS                         │
+│  Fastest 5K: 24:12   Countries: 9│
+│           View all stats →     │
+├───────────────────────────────┤
+│  RARE ACHIEVEMENTS             │
+│  [Epic · Ironman] [Rare · Marathon]│
+├───────────────────────────────┤
+│  COMPLETED              142 total│
+│  ✓ Ran a 10K · 2 days ago      │
+│  ✓ Visited Portugal · 1 wk ago │
+│           View full history →  │
+└───────────────────────────────┘
+```
+
+1. **Identity header.** Avatar, display name, Overall Level (large — the
+   same visual weight Home gives it), a within-level progress bar, and
+   **lifetime XP total spelled out** ("4,780 lifetime XP"). This is the
+   one place the raw lifetime number gets shown prominently — Home
+   deliberately withholds it (§2) so it doesn't compete with "what's next
+   today."
+2. **Trophy Case.** The emotional centerpiece — see §4a. Sits directly
+   under the header because it's the most human, least numeric part of
+   the screen, and should be the first thing a visitor's eye lands on
+   once profiles are ever shown to anyone else.
+3. **Category Levels.** The literal "character sheet" the constitution
+   names. See §4b for the exact inline/expand rule — this is the
+   resolution to the open question this doc previously flagged.
+4. **Quests.** A compact summary (slot counts + a couple of the
+   highest-priority active quests), not the full Main/Side/Backlog list.
+   `View all quests` opens the dedicated Full Quest List screen (§4c) —
+   the same destination Home's `See all quests` link (§2) points to.
+5. **Stats.** A small, user-curated set of featured stats — mirrors the
+   trophy case's curation model, not an auto-generated dashboard. `View
+   all stats` opens deeper analytics (§4d).
+6. **Rare Achievements.** System-curated (not user-picked, unlike the
+   trophy case) — automatically surfaces the user's own Rare/Epic/
+   Legendary completions. See §4e.
+7. **Completed history.** Most recent handful inline, `View full history`
+   opens the searchable/filterable complete list. See §4e.
+
+### Primary action
+
+There isn't a single forced primary action, and that's a deliberate
+difference from the other three screens rather than an omission — Profile
+is a read-first surface. If forced to name the closest thing to one, it's
+whatever drill-in a given user actually wants (`View all quests` is the
+most forward-looking, action-oriented link on the screen), but no visual
+treatment pushes the user toward any one of them. A brand-new/empty
+profile is the one exception — see Empty state.
+
+### Secondary actions
+
+`Edit trophy case`, `Edit selected stats`, `Show all categories`, `View
+all quests`, `View all stats`, `View full history`, tapping any trophy
+card / category row / quest / stat / history item to open its underlying
+detail screen, and a settings entry point (gear icon, top-right of the
+header) for account management — out of this doc's detailed scope except
+where it intersects privacy (§4f).
+
+### Empty state
+
+Two distinct cases, handled differently on purpose:
+
+- **Fresh from onboarding.** Every module already has *something* (a
+  trophy the user was prompted to pick during onboarding reveal, at least
+  one touched category, starter quests, an imported completion or two).
+  Modules render normally, just short. The Stats module is the one
+  legitimate exception — onboarding doesn't ask the user to pick featured
+  stats, so it shows a single inline prompt: `Pick stats to feature →`.
+- **User explicitly skipped onboarding (`Skip for now`, §1).** Every
+  module would independently be empty. Rather than stacking five separate
+  "nothing here yet" prompts — which reads as broken, not inviting — the
+  whole screen collapses into **one consolidated empty state**: header
+  shows Level 1 / 0 XP honestly, and below it a single card: `Nothing
+  here yet — let's fix that` with one CTA, `Build my profile`, that
+  re-enters the onboarding triage deck (§1). No module scaffolding
+  (empty trophy row, empty category list, etc.) renders underneath it —
+  showing five sad empty boxes is worse than showing one clear next step.
+
+### Populated state
+
+As diagrammed above. A profile that's several months old settles into a
+steady state where every module has real content and the "show
+all"/"view all" links are actually doing work (hiding real depth) rather
+than being decorative.
+
+### Edge cases
+
+- **User active in all 10 categories for years.** Category module shows
+  its 6-tile cap plus `Show all categories`; nothing about the screen's
+  shape changes for this user versus a brand-new one — this is the
+  load-bearing invariant that keeps Profile's *default* view identical in
+  size for casual and power users (same principle Home already commits
+  to in §2).
+- **Trophy case, stats, or category selections reference an achievement
+  the user later hides** (`isHiddenFromProfile = true`, per
+  `docs/domain-model.md` §1.2). A hidden completed achievement is
+  automatically pulled from the trophy case and rare-achievements strip
+  if it was featured there — a hidden item can never still appear
+  elsewhere on the same profile it's hidden from. The user is warned at
+  the moment of hiding if it would remove something currently featured
+  ("This is in your trophy case — hiding it will remove it from there
+  too. Continue?").
+- **A user-created achievement is later edited or deleted** by its
+  creator. If it's referenced in the trophy case or featured stats, it's
+  removed from those slots gracefully (slot becomes an empty "+" rather
+  than a broken reference); history entries persist since completion
+  history is permanent per the constitution.
+- **Very long display name.** Truncates in the header; never pushes the
+  level/XP line off-screen.
+- **Multi-year power user's Completed History.** Hundreds of entries —
+  the inline module still only ever shows the most recent handful; the
+  full-history screen (§4e) is where pagination/search/filter live, never
+  the Profile screen itself.
+
+### Accessibility
+
+- Every module is a distinct VoiceOver heading, read in the same
+  top-to-bottom order sighted users see, so a screen-reader user can jump
+  module-to-module via the rotor instead of swiping through the entire
+  screen linearly.
+- Horizontal scrolling collections (Trophy Case, Rare Achievements) use
+  standard iOS scrollable-container semantics — each card is its own
+  accessibility element (name, one-line context, date), never one
+  flattened image described as "trophy case, image."
+- Dynamic Type: category level rows, stat tiles, and trophy cards reflow
+  (stack rather than clip) at larger sizes; at extreme sizes the category
+  module and stats module may show fewer items per screen before
+  scrolling, never truncated numbers.
+- Level, XP, and category progress are exposed as spoken values, never
+  conveyed by bar fill or color alone (same rule as Home, §2).
+- Rarity badges on the Rare Achievements strip pair an icon/label with
+  color, consistent with Achievement Detail (§3).
+- All module-header links (`Show all`, `View all…`, `Edit…`) are ≥44pt
+  tap targets.
+
+### Deliberately NOT shown on Profile
+
+- Other users' profiles, a friends list, or any comparison surface —
+  doesn't exist yet, and even once it does, belongs to a
+  leaderboard/friends surface, not folded into this screen.
+- An activity feed, comments, likes, or any feed-style content (PD-003).
+- All 10 categories shown flatly with equal weight, or fake "Level 1"
+  badges on categories the user has never touched — see §4b.
+- Full interactive charts inline — only single curated numbers (Stats
+  module) with a drill-in; the chart-heavy view is a separate screen
+  (§4d).
+- Ads or upsell of any kind.
+- A public/private toggle that doesn't yet do anything — see §4f for why
+  this is a deliberate omission, not an oversight.
+- An auto-generated "highlights" reel presented in place of, or blended
+  with, the user's own trophy case picks — the system may suggest
+  candidates when the user is curating (§4a), but never silently
+  overrides what they've chosen.
+- Every completed achievement ever, in one scroll — only a recent handful
+  inline, full list behind `View full history`.
+- Streak counters, "last active" timestamps, or any guilt/urgency
+  messaging.
+
+---
+
+### 4a. Trophy Case
+
+The constitution is explicit that this is user-curated, not
+auto-generated, and "does not need to be the achievements worth the most
+XP" — it should read as a small, personal set of mementos, not a badge
+shelf. Visual treatment matters here more than almost anywhere else in
+the app outside the unlock moment itself.
+
+- **Presentation.** A horizontal row of individually-styled cards —
+  closer to a framed photo/plaque than a generic achievement badge:
+  achievement name, one short line of personal context if the user added
+  one (optional — reuses the "Add note" field from Achievement Detail,
+  §3), and the completion date. Deliberately a different card shape/style
+  from ordinary achievement list rows elsewhere in the app, so it reads
+  as "the highlight reel" at a glance rather than blending into routine
+  UI.
+- **Cap: up to 6 slots.** Chosen to keep it genuinely small (per the
+  constitution's own wording) while comfortably fitting the constitution's
+  own worked onboarding example (5 touched categories) with one slot of
+  headroom; a tunable constant, not a hard product truth.
+- **Order is user-controlled** (drag to reorder), not chronological or
+  XP-sorted by default — sequencing is part of how this becomes "a
+  miniature autobiography," and that's the user's authorship, not the
+  system's.
+- **Editing.** `Edit trophy case` opens a searchable picker over the
+  user's completed achievements (search matters here for power users with
+  a long history); tapping a completed slot removes it; an empty slot
+  under the cap shows a `+` affordance. The picker may lightly suggest
+  candidates (e.g., the user's rarest completions, or ones they added a
+  note to) as a starting point for a new/undecided user, but selection is
+  always a manual, one-at-a-time confirm — never auto-populated on the
+  user's behalf.
+- **Reachable from two places:** here, and as `Add to Trophy Case` on a
+  completed Achievement Detail screen's overflow menu (§3) — the natural
+  moment to add something is right after completing it.
+- **Empty state.** A single prompt card in the row — `Pick your first
+  trophy →` — opens the same picker. Not a barren empty rectangle with
+  floating instructions.
+
+### 4b. Category Levels — resolving the depth question
+
+This section directly resolves the item this doc previously flagged as
+open: *"Category level list depth in Profile (how many of the up-to-10
+categories show by default vs. behind a 'show all')."*
+
+Per `docs/domain-model.md` §2, all 10 categories exist as first-class
+values from day one, but only 6 have seeded built-in content at MVP; the
+other 4 are "defined but empty" (no curated library yet, but users can
+self-create achievements in them immediately). **The profile must not
+expose that seeded/unseeded distinction to the user at all** — it's a
+content-curation implementation detail, not something a user should have
+to understand. What the profile *does* need to distinguish is simply:
+has this user done anything in this category, or not.
+
+**Rule:**
+
+- A category is **active** if it has any XP > 0 (i.e., the user has at
+  least one completed achievement there, seeded or self-created — doesn't
+  matter which).
+- Inline on Profile, show **all active categories, sorted by level
+  descending (ties broken by XP), capped at 6.** If the user has 6 or
+  fewer active categories, every one of them shows inline — nothing is
+  artificially held back behind "Show all" for a normal early user. If
+  they have more than 6, the top 6 show inline and the rest sit behind
+  `Show all categories`.
+- **Dormant categories (0 XP) never appear inline, full stop** — not as
+  "Level 1," not greyed out in the main list. Showing a category the user
+  has never touched at "Level 1" would misrepresent activity as
+  accomplishment (level 1 is XP ≥ 0's floor, not a real milestone) and
+  would make an early profile look cluttered with categories that mean
+  nothing yet.
+- Dormant categories only appear inside the expanded `Show all
+  categories` view, visually de-emphasized (muted color, no progress
+  bar), labeled **"Not started"** rather than a level number, and listed
+  after all active ones, sorted alphabetically (no meaningful basis to
+  rank two categories that are both at zero).
+
+**Why cap at 6, not some other number:** it matches the trophy case's cap
+(both express "a small, curated, character-defining set," which is the
+whole point of a character sheet), and it comfortably covers the
+constitution's own worked onboarding example (Fitness, Travel, Education,
+Skills, Experiences = 5 touched categories) without immediately forcing a
+new user behind an extra tap. A user who's only touched 2–3 categories
+sees exactly 2–3 tiles — never padded with zeros to look fuller than it
+is.
+
+### 4c. Full Quest List (Main / Side / Backlog)
+
+This is the destination for both Home's `See all quests` link (§2) and
+Profile's `View all quests` link — one canonical screen, two entry
+points, so the full list is never duplicated in two places with two
+different truths.
+
+- **Three clearly labeled sections**, in this order: **Main Quests**
+  (always shows exactly 3 rows — filled slots plus an explicit empty-slot
+  `+` affordance for unused ones, so the 3-slot structure itself is
+  always visible, not just implied), **Side Quests** (same pattern, cap
+  5), **Backlog** (unlimited, plain reverse-chronological-by-added list
+  by default).
+- Tapping any quest opens its Achievement Detail screen (§3) — that
+  screen remains the single source of truth for `Mark Complete` / `Log
+  Progress` / `Pause` / `Abandon`; this list is for **overview and
+  triage**, not a second place those actions live. A light swipe action
+  (e.g., swipe to pause) is an acceptable accelerator, same rule as
+  onboarding's swipe-plus-button pattern (§1) — never the only path.
+- **Manually promoting/demoting** a quest (e.g., moving a Side Quest into
+  a full Main track) triggers the same three-way choice specified in
+  `docs/domain-model.md` §6 (demote something else / add as Side instead
+  / cancel) — never a silent overwrite, regardless of whether the
+  transition was triggered from here or from Achievement Detail.
+- **Backlog empty state:** a single prompt, `Browse Discover for more
+  quests →`, closing the loop back into the discovery surface rather than
+  leaving a dead end.
+- **Power-user affordance, off by default:** a filter/sort control
+  (by category, by recently added) sits behind a small icon in the
+  Backlog header — collapsed, not shown expanded, so a casual user with 4
+  backlog items never sees a filter bar they don't need.
+
+### 4d. Selected Stats & the deeper Charts screen
+
+- **Selected Stats module (this screen):** a small, user-curated set of
+  featured stats (e.g., "Fastest 5K: 24:12," "Countries: 9," "Longest
+  run: 14 mi") — plain label-and-value tiles, no charts, no auto-populated
+  dashboard of every stat the app happens to track. Curation model
+  mirrors the trophy case: `Edit selected stats` opens a picker over the
+  stats the user has any data for; nothing is featured without the user
+  choosing it.
+- **`View all stats`** opens a dedicated Charts/Analytics screen covering
+  the constitution's full list (XP over time, achievements over time,
+  category distribution, completion rate, personal-record history,
+  rarity distribution, quest completion, seasonal comparisons, friend
+  comparison once friends exist, achievement calendar, category level
+  changes). **That screen's detailed layout is intentionally out of scope
+  for this pass** — it deserves its own dedicated wireframe given how
+  much surface area it covers (flagged in Open Questions below) — but its
+  role from Profile's perspective is exactly the "progressive reveal"
+  boundary: a casual user never has to open it, and nothing on the
+  default Profile view depends on it existing.
+
+### 4e. Completed History & Rare Achievements
+
+Two related but distinct modules — don't merge them:
+
+- **Completed History** is the user's own complete record: chronological,
+  permanent (per the constitution, completions stay in history unless the
+  user explicitly hides or undoes them), and comprehensive. Inline on
+  Profile: most recent 3–5 entries. `View full history` opens the
+  complete searchable/filterable list — filters (category, rarity, date
+  range, verification level) live behind a single filter icon, collapsed
+  by default, so the base experience is a plain reverse-chronological
+  list, not a spreadsheet-style filter bar shown up front.
+- **Rare Achievements** is a **system-curated** showcase — automatically
+  populated with the user's Rare/Epic/Legendary-tier completions (per
+  `docs/domain-model.md` §5's rarity labels), contrasted deliberately with
+  the trophy case's manual curation. Visually smaller/lighter-weight
+  cards than the trophy case's "plaque" treatment, so the two don't
+  compete for the same visual register — trophy case says "this mattered
+  to me," rare achievements says "this is objectively uncommon." If the
+  user has zero Rare-or-above completions, the module is **hidden
+  entirely**, not shown empty (same pattern Home uses for its Recent
+  module, §2).
+- Both modules respect `isHiddenFromProfile` — a hidden completed
+  achievement never appears in either list, consistent with §4 Edge
+  cases above.
+
+### 4f. Visibility & privacy model
+
+The constitution says "users should control what is public," but at MVP
+there are no friends and no viewers other than the user themselves — a
+profile-level public/private switch would be a real setting with zero
+possible effect, which is exactly the "don't present a setting that does
+nothing yet" trap this task called out. Two things are true and real
+today; one thing is deliberately deferred:
+
+- **Real today — per-item hiding.** `isHiddenFromProfile`
+  (`docs/domain-model.md` §1.2) is a genuine, working control: a
+  completed achievement stays permanently in the user's private history
+  and its XP stands, but it can be excluded from every profile-facing
+  surface (trophy case eligibility, rare-achievements strip, completed
+  history). This is useful *today*, with zero viewers, purely as personal
+  curation — and it's also the exact mechanism that will matter once
+  profiles become visible to others, so nothing about it needs to change
+  when Friends ships.
+- **Real today — explicit outbound Share.** The `Share` action on a
+  completed Achievement Detail screen (§3) generates a shareable card for
+  *one* achievement, sent outside the app via the system share sheet.
+  This is the only sense in which anything on this profile is "public"
+  right now: a deliberate, one-item-at-a-time, user-initiated act, never
+  an ambient or discoverable profile page. It requires no friends graph
+  to be meaningful.
+- **Deferred — a profile-level public/private toggle.** Not built, and
+  **not shown in the UI at MVP.** `app-engineer` should add the
+  structural data field now (a `profileVisibility` value, defaulting to
+  private) so no migration is needed later, but no toggle renders on
+  Profile or in settings until there's an actual audience (Friends,
+  `BACKLOG.md` LATER) for it to control. Shipping a visible-but-inert
+  toggle would be worse than shipping none — it implies a feature exists
+  that doesn't.
+
+This is a privacy-adjacent decision per `CLAUDE.md`'s working agreements
+("escalate anything that materially changes... privacy") — flagged for
+the founder in Open Questions below, though the recommendation above is
+the one I'd ship absent objection.
+
+---
+
 ## Open questions
 
 For the founder / for coordination with `product-designer` and
@@ -533,7 +949,26 @@ For the founder / for coordination with `product-designer` and
    provisional label plain (e.g. "Uncommon"), with no percentage
    attached, rather than the "34% of users" framing this doc originally
    sketched.
-4. **Category level list depth in Profile** (how many of the up-to-10
-   categories show by default vs. behind a "show all") isn't speced
-   here since Profile wasn't in scope for this milestone — will need its
-   own wireframe pass before `app-engineer` builds it.
+4. **Category level list depth in Profile — resolved.** §4b above settles
+   this: only categories with any real XP ("active") show inline, capped
+   at 6 and ranked by level; categories with zero XP never appear inline
+   at all (not even as "Level 1") and only show, de-emphasized as "Not
+   started," inside `Show all categories`.
+5. **Trophy case (§4a) and category-module (§4b) caps of 6** are
+   calibrated design guesses, not tested numbers — worth a gut-check once
+   real profiles exist, same caveat `product-designer` already attached to
+   the XP curve in `docs/domain-model.md` §7.
+6. **Profile-level public/private toggle (§4f) — deliberately not built
+   or shown at MVP,** in favor of two things that are real today
+   (per-item hide, one-off Share) plus a structural-only DB field for
+   `app-engineer` to add now. Flagging for the founder specifically
+   because it's a privacy-adjacent call: confirm this reads as "sensible
+   sequencing" rather than "a feature quietly missing," and that a
+   silent, no-UI placeholder field is the right way to avoid shipping an
+   inert toggle.
+7. **The Charts/Analytics screen referenced from Profile's `View all
+   stats`** (§4d) is real scope but was intentionally not wireframed in
+   this pass — it covers a lot of surface area (the constitution's full
+   analytics list) and deserves its own dedicated pass rather than being
+   squeezed in as a subsection here. Needed before `app-engineer` builds
+   that screen.
