@@ -1,16 +1,19 @@
 -- Initial schema for the Life Achievement App ("Stones"), matching
 -- docs/domain-model.md v0.1.
 --
--- Three owned tables, per domain-model.md §0/§1/§3:
---   1. achievement_definitions      — the shared catalog (public read)
---   2. user_achievement_instances   — one row per (user, definition), the
+-- Four owned tables, per domain-model.md §0/§1/§3/§4:
+--   1. quest_chains                 — chain-level metadata: a chain's own
+--                                     name/description (public read)
+--   2. achievement_definitions      — the shared catalog (public read)
+--   3. user_achievement_instances   — one row per (user, definition), the
 --                                     state machine + verification state
 --                                     (private to owner)
---   3. xp_ledger                    — append-only XP grants/reversals
+--   4. xp_ledger                    — append-only XP grants/reversals
 --                                     (private to owner)
 --
--- RLS defaults to private (no public access) except achievement_definitions,
--- which is shared catalog content readable by any authenticated user.
+-- RLS defaults to private (no public access) except quest_chains and
+-- achievement_definitions, which are shared catalog content readable by
+-- any authenticated user.
 --
 -- NOTE: this migration is hand-written in a session with no access to the
 -- founder's actual Supabase project. Reconcile against a real
@@ -74,6 +77,26 @@ create type verification_level as enum (
 );
 
 -- =========================================================================
+-- quest_chains — chain-level metadata (domain-model.md §4)
+-- =========================================================================
+--
+-- `achievement_definitions.quest_chain_id` has always been a bare grouping
+-- UUID shared by a chain's rungs, with nothing storing the chain's own
+-- display name/description (e.g. "5K Questline") — needed for the
+-- achievement-detail screen's "Part of the 5K Questline · Step 3 of 6"
+-- (docs/wireframes.md). This table is shared catalog content, same as
+-- achievement_definitions' built-in rows: hand-authored, not user-editable.
+
+create table quest_chains (
+    id uuid primary key,
+    name text not null,
+    description text not null default '',
+    -- A chain lives in exactly one category, matching all of its rungs.
+    category achievement_category not null,
+    created_at timestamptz not null default now()
+);
+
+-- =========================================================================
 -- achievement_definitions — the shared catalog (domain-model.md §1.1)
 -- =========================================================================
 
@@ -90,7 +113,7 @@ create table achievement_definitions (
     -- rule for seed-content authors and future admin tooling, not a
     -- suggestion.
     xp_value integer not null,
-    quest_chain_id uuid null,
+    quest_chain_id uuid null references quest_chains (id) on delete restrict,
     quest_chain_position integer null,
     -- Design-time-only placeholder for seed content (§5). Never confused
     -- with computed rarity, which is a backend aggregate over
@@ -241,9 +264,21 @@ create trigger xp_ledger_forbid_delete
 -- Row Level Security
 -- =========================================================================
 
+alter table quest_chains enable row level security;
 alter table achievement_definitions enable row level security;
 alter table user_achievement_instances enable row level security;
 alter table xp_ledger enable row level security;
+
+-- quest_chains: shared catalog content, same treatment as the built-in
+-- achievement_definitions rows — public read for any authenticated user,
+-- no insert/update/delete policy at all. Chains are hand-authored (only
+-- built-in for now), same as achievement_definitions' built-in rows; there
+-- is no user-facing "create your own chain" feature yet.
+create policy quest_chains_select_authenticated
+    on quest_chains
+    for select
+    to authenticated
+    using (true);
 
 -- achievement_definitions: built-in/AI-generated/integration-detected rows
 -- are shared catalog content, publicly readable by any authenticated user

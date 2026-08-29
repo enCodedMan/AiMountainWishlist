@@ -1,5 +1,33 @@
 import Foundation
 
+/// Chain-level metadata: a quest chain's own display name and description
+/// (e.g. "5K Questline"), as distinct from `QuestChainRung`, which is a
+/// single achievement's position *within* a chain. Nothing previously
+/// stored this — `AchievementDefinition.questChainId` was just a bare
+/// grouping UUID shared by a chain's rungs — but the achievement-detail
+/// screen (docs/wireframes.md) needs it to render "Part of the 5K
+/// Questline · Step 3 of 6." See docs/domain-model.md §4.
+///
+/// Metadata only: this type carries no progression logic. Chain-completion
+/// behavior (auto-surfacing the next rung, auto-completing lower ones) is
+/// entirely in `QuestChain.completing(...)` below and is unaffected by
+/// this type.
+public struct QuestChainDefinition: Identifiable, Equatable, Codable, Sendable {
+    public let id: UUID
+    public var name: String
+    public var description: String
+    /// A chain lives in exactly one category, matching all of its rungs'
+    /// `AchievementDefinition.category`.
+    public var category: Category
+
+    public init(id: UUID, name: String, description: String, category: Category) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.category = category
+    }
+}
+
 /// A lightweight, chain-scoped view of one rung — just the fields the
 /// chain-progression rules in domain-model.md §4.4 need. Callers project
 /// their `AchievementDefinition`s into this shape (or use

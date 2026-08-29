@@ -119,4 +119,51 @@ final class QuestChainTests: XCTestCase {
         XCTAssertEqual(rung.position, 4)
         XCTAssertEqual(rung.questChainId, chainId)
     }
+
+    // MARK: - QuestChainDefinition (chain-level metadata, domain-model.md §4)
+
+    func testQuestChainDefinitionRoundTripsThroughCodable() throws {
+        let definition = QuestChainDefinition(
+            id: UUID(),
+            name: "5K Questline",
+            description: "Go from your first 5K to a sub-27:30 pace.",
+            category: .fitness
+        )
+
+        let data = try JSONEncoder().encode(definition)
+        let decoded = try JSONDecoder().decode(QuestChainDefinition.self, from: data)
+
+        XCTAssertEqual(decoded, definition)
+    }
+
+    func testQuestChainDefinitionCategoryMatchesItsRungs() {
+        // Not an invariant enforced by the type itself (that's a seed-data/
+        // schema concern, per the migration's own comment), but documents
+        // the expectation: a chain's category should equal every rung's
+        // category. Regression check against the three real MVP chains'
+        // "one chain, one category" framing (docs/domain-model.md §4).
+        let (chainId, rungs) = makeChain()
+        let chainDefinition = QuestChainDefinition(
+            id: chainId,
+            name: "Peak Bagging",
+            description: "Summit progressively higher peaks.",
+            category: .adventure
+        )
+
+        let definitions = rungs.map { rung in
+            AchievementDefinition(
+                id: rung.achievementDefinitionId,
+                name: "Rung \(rung.position)",
+                category: chainDefinition.category,
+                description: "",
+                completionCriteria: .binary,
+                xpValue: 30,
+                questChainId: rung.questChainId,
+                questChainPosition: rung.position,
+                source: .builtIn
+            )
+        }
+
+        XCTAssertTrue(definitions.allSatisfy { $0.category == chainDefinition.category })
+    }
 }

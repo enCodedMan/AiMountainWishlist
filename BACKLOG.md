@@ -20,6 +20,14 @@
   `backend/supabase/migrations/`. **Written but unverified** — no
   Swift/Xcode toolchain has run `swift test` or built the Xcode project
   yet; needs a Mac before M0 is actually done, not just drafted.
+- Quest chain metadata — `quest_chains` table added to
+  `backend/supabase/migrations/20260829000000_initial_schema.sql` (name/
+  description/category per chain, FK'd from `achievement_definitions
+  .quest_chain_id` on delete restrict), `QuestChainDefinition` Swift type
+  in `app/LifeAchievementCore/Sources/LifeAchievementCore/QuestChain.swift`,
+  seed rows for the three real MVP chains in
+  `backend/supabase/seed/quest_chains.v1.json`. Same unverified caveat as
+  the rest of the scaffold above — no Swift/Xcode toolchain has run this.
 
 M0 is otherwise complete. Blocked on the founder for: (1) verifying the
 scaffold on a Mac, (2) creating the real Supabase project so `app-engineer`
@@ -30,19 +38,13 @@ for device testing (not urgent — Simulator covers early M1 work).
 
 - Charts/Analytics screen wireframe (flagged as out of scope by the
   Profile pass — needed before `app-engineer` builds it)
-- Quest chain metadata schema gap: nothing currently stores a chain's own
-  display name/description (e.g. "5K Questline") — `docs/wireframes.md`'s
-  achievement-detail screen already assumes this exists ("Part of the 5K
-  Questline · Step 3 of 6"). Small migration addition, surfaced while
-  writing seed content — needed before that part of achievement detail
-  can be built.
 
 # NEXT
 
 - Authentication (blocked on founder's Supabase project)
 - User profile
-- Achievement library (decode/import `achievements.v1.json` once a real
-  Supabase project exists)
+- Achievement library (decode/import `achievements.v1.json` and
+  `quest_chains.v1.json` once a real Supabase project exists)
 - Quest creation
 - Achievement completion
 - XP calculations

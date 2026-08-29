@@ -1,0 +1,20 @@
+[
+  {
+    "id": "00000000-0000-4000-9000-000000000001",
+    "name": "5K Questline",
+    "description": "From your first 5K to a sub-20-minute pace, one honest step at a time.",
+    "category": "fitness"
+  },
+  {
+    "id": "00000000-0000-4000-9000-000000000002",
+    "name": "Peak Bagging",
+    "description": "Summit progressively higher peaks, from your first 5,000-footer to a 6,000-meter giant.",
+    "category": "adventure"
+  },
+  {
+    "id": "00000000-0000-4000-9000-000000000003",
+    "name": "Language Fluency",
+    "description": "From your first 100 words to full fluency in a new language.",
+    "category": "skills"
+  }
+]

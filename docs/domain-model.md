@@ -486,6 +486,16 @@ for revisit once there's real completion data (see §7).
 Two worked examples beyond the constitution's 5K chain, in different
 categories, plus one forward-reference example.
 
+Each chain now has a real metadata row (not just a bare grouping UUID):
+the `quest_chains` table (`id`, `name`, `description`, `category`) and
+its Swift counterpart `QuestChainDefinition` store a chain's own display
+name and description — e.g. "5K Questline" — which the achievement-detail
+screen needs for "Part of the 5K Questline · Step 3 of 6"
+(`docs/wireframes.md`). This is metadata only; the chain-progression rules
+in §4.4 are unaffected and still operate purely on `QuestChainRung`. The
+three real MVP chains' rows are seeded in
+`backend/supabase/seed/quest_chains.v1.json`.
+
 ### 4.1 Adventure — "Peak Bagging"
 
 | Rung | Achievement | XP |
