@@ -1,43 +1,49 @@
 extends SceneTree
-## Balance simulator: a greedy "decent player" bot plays full runs headless.
+## Balance simulator: a "decent player" (2-ply lookahead) plays full runs headless.
 ## godot --headless --path . -s tests/sim.gd   (env SIM_RUNS, SIM_ARMY optional)
 
 const Game = preload("res://scripts/game.gd")
 const Board = preload("res://scripts/board.gd")
-const Cards = preload("res://scripts/cards.gd")
+const Relics = preload("res://scripts/relics.gd")
 
 var rng := RandomNumberGenerator.new()
+var round_results := {}  # "ante-stage" -> [won, played]
+var reasons := {}
 
 
 func _init() -> void:
-	var runs := int(OS.get_environment("SIM_RUNS")) if OS.get_environment("SIM_RUNS") != "" else 200
+	var runs := int(OS.get_environment("SIM_RUNS")) if OS.get_environment("SIM_RUNS") != "" else 100
 	var armies: Array = [OS.get_environment("SIM_ARMY")] if OS.get_environment("SIM_ARMY") != "" else Game.ARMIES.keys()
 	rng.seed = 7
 	for army in armies:
 		var antes := {}
 		var wins := 0
-		var lost_on_boss := 0
 		for r in runs:
 			var g := Game.new()
-			g.army = army
+			g.army_id = army
 			g.new_run(1000 + r)
 			play_run(g)
 			antes[g.ante()] = antes.get(g.ante(), 0) + 1
 			if g.state == "won":
 				wins += 1
-			elif g.stage() == 2:
-				lost_on_boss += 1
 		var keys := antes.keys()
 		keys.sort()
 		var dist := []
 		for k in keys:
 			dist.append("%d:%d" % [k, antes[k]])
-		print("%-9s win %5.1f%%  lost-on-boss %4.1f%%  ante reached %s" % [army, 100.0 * wins / runs, 100.0 * lost_on_boss / runs, " ".join(dist)])
+		print("%-9s win %5.1f%%  ante reached %s" % [army, 100.0 * wins / runs, " ".join(dist)])
+	var rk := round_results.keys()
+	rk.sort()
+	var line := []
+	for k in rk:
+		line.append("%s %d%%" % [k, 100 * round_results[k][0] / round_results[k][1]])
+	print("round win rate: ", ", ".join(line))
+	print("losses: ", reasons)
 	quit()
 
 
 func play_run(g: Game) -> void:
-	for step in 2000:
+	for step in 5000:
 		match g.state:
 			"won", "lost":
 				return
@@ -45,54 +51,36 @@ func play_run(g: Game) -> void:
 				shop(g)
 				g.next_round()
 			"play":
+				var key := "%d%s" % [g.ante(), "sbB"[g.stage()]]
+				var rn := g.round_num
 				play_turn(g)
+				if g.round_num != rn or g.state != "play":
+					var rr: Array = round_results.get(key, [0, 0])
+					rr[1] += 1
+					if g.last_result == "won" or g.state == "won":
+						rr[0] += 1
+					else:
+						var why: String = g.message.split(".")[0]
+						reasons[why] = reasons.get(why, 0) + 1
+					round_results[key] = rr
 
 
-## Player chains from every piece (reuses the bot's chain search, which is colour-agnostic).
-func player_moves(g: Game) -> Array:
-	var b: Board = g.board
-	var caps: Array = []
-	var steps: Array = []
-	for p in b.positions_of(Board.is_player):
-		g._collect_chains(b, p, p, [], [], caps)
-		for to in b.steps_from(p):
-			steps.append({"from": p, "path": [to], "captured": []})
-	return caps if not caps.is_empty() else steps
-
-
+## Score a full move by the bot's best reply (from the player's side).
 func value(g: Game, m: Dictionary) -> float:
-	var v := 0.0
-	v += 10.0 * m.captured.size() * m.captured.size()
-	for c in m.path:
-		var t: int = g.board.get_tile(c)
-		if t == Board.Tile.GOLD:
-			v += 6.0
-		elif t == Board.Tile.RED:
-			v += 8.0
-	var to: Vector2i = m.path.back()
-	if g.board.get_cell(m.from) == Board.PAWN and to.y == 0:
-		v += 8.0
-	# Don't leave the piece hanging.
-	var after: Board = g.board.copy()
-	var piece := after.get_cell(m.from)
-	after.set_cell(m.from, Board.EMPTY)
-	for c in m.captured:
-		after.set_cell(c, Board.EMPTY)
-	after.set_cell(to, piece)
-	for q in after.positions_of(Board.is_foe):
-		for land in after.jumps_from(q):
-			if (q + land) / 2 == to:
-				v -= 7.0
-	# Quiet moves: drift toward the enemy so jumps appear next turn.
-	if m.captured.is_empty():
-		v += (m.from.y - to.y) * 1.0
-	return v + rng.randf()
+	var pr := g.player_rules()
+	var fr := g.foe_rules()
+	var b: Board = g.board.copy()
+	b.apply_move(m, pr)
+	var v := -g._search(b, -1, 1, -INF, INF)
+	# Push forward when nothing's happening, so the turn limit isn't wasted.
+	v += (m.from.y - m.path.back().y) * 0.5
+	return v + rng.randf() * 0.3
 
 
 func play_turn(g: Game) -> void:
-	var moves := player_moves(g)
+	var moves := g.board.legal_moves(1, g.player_rules(), g.foe_rules())
 	if moves.is_empty():
-		g.state = "lost"
+		g._check_round_over()
 		return
 	var best: Dictionary = moves[0]
 	var bv := -INF
@@ -102,33 +90,26 @@ func play_turn(g: Game) -> void:
 			bv = v
 			best = m
 	g.tap(best.from)
-	var at: Vector2i = best.from
 	for to in best.path:
-		if g.state != "play":
+		if g.state != "play" or not g.tap(to):
 			return
-		if not g.tap(to):
-			return
-		at = to
-
-
-## Shop policy: buy the best-rated affordable cards, then training.
-func card_score(id: String) -> float:
-	var info: Dictionary = Cards.ALL[id]
-	return info.rarity * 3.0 + (2.0 if "x" in info.desc and "mult" in info.desc else 0.0) + rng.randf()
 
 
 func shop(g: Game) -> void:
-	for pass_i in 3:
+	if g.army.size() < 4 and g.can_recruit():
+		g.recruit()
+	for pass_i in 2:
 		var best := -1
 		var bs := -INF
 		for i in g.shop.size():
-			if not g.can_buy(i):
-				continue
-			var it: Dictionary = g.shop[i]
-			var s := card_score(it.id) + 2.0 if it.kind == "card" else 1.0 + rng.randf()
-			if s > bs:
-				bs = s
-				best = i
-		if best < 0:
-			return
-		g.buy(best)
+			if g.can_buy(i):
+				var s: float = Relics.ALL[g.shop[i]].rarity + rng.randf()
+				if s > bs:
+					bs = s
+					best = i
+		if best >= 0:
+			g.buy(best)
+	if g.can_crown() and g.money >= Game.CROWN_COST + 2:
+		g.crown_pawn()
+	while g.can_recruit() and g.money >= Game.RECRUIT_COST + 3:
+		g.recruit()

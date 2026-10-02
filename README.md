@@ -1,26 +1,34 @@
 # Kingjump (prototype)
 
-Checkers roguelike: jump enemy pieces, chain multi-jumps for big scores (chips x mult), beat the round's score target, buy relics in the shop.
+Checkers roguelike: every round is a real game of checkers against a bot. Capture every enemy piece before your turns run out, then spend your winnings on relics that bend the rules.
 
 ## Run it
 1. Install Godot 4.3+ (free): https://godotengine.org/download
 2. Open Godot, click Import, pick this folder's `project.godot`, then press Play (F5).
 
-Tap a white piece, then tap a green dot to move. Jumping a red piece scores; if another jump is available the chain continues. Gold squares give +30 chips, red squares +2 mult when you land on them by jumping.
+Tap a white piece, then tap a green dot to move. Captures are mandatory for both sides (glowing pieces must jump) and multi-jumps continue until no jump is left.
 
-After your move the **bot** plays one real checkers move: captures are mandatory, it finishes multi-jumps, crowns on your back row, and avoids leaving pieces hanging. It blunders less each round. Its last move is tinted red.
+**Rounds:** 3 per ante (Small, Big, Boss), 5 antes to win, endless after. Enemies come in named, hand-placed formations (Wedge, Pincer, Phalanx...) that grow with the ante; the shop previews the next one. Bosses add a rule (Swift, Mirror, Ambush, Silence...). You get `8 + 3 per enemy` turns.
 
-**Cards (passive):** hold up to 5. Each one triggers automatically when its event happens (a jump, a chain ending, a quiet move, a crowning, losing a piece, round start/end), left to right, so order matters. Some scale over the run (Snowball, Martyr, Patient Hand), some multiply (Hat Trick, Double Agent, Last Stand) and Echo retriggers its left neighbour. 22 cards across Common / Uncommon / Rare. Tap a card to read it, move it left or sell it.
+**The bot** looks ahead with minimax and thinks deeper each ante. Its pawns never crown: a pawn that reaches your back row breaks through and costs you a turn.
 
-**Shop:** 3 cards (rarity-weighted) and 2 **training** upgrades (stacking pawn or king bonuses: +chips, +mult or +$ per jump; each repeat costs $2 more).
+**Your army** carries over between rounds, and pieces the bot captures are gone for good. Recruit pawns ($3) or crown one ($5) in the shop.
+
+**Lives:** 3. Losing a round (out of turns, or no legal moves) costs a life and you retry the same round. Losing your whole army ends the run.
+
+**Relics (passive, 5 slots):** 20 relics that change the rules (Backstab, Sprint, Flying Kings, Iron Kings, Fortress), add triggers (Powder Keg, Coronation Blast, Chain Lightning, Momentum) or make money (Bounty, Greed, Piggy Bank). Order matters only for the Silence boss.
+
+**No score.** Score was cut in v2: winning the checkers game is the goal, so every capture and every lost piece matters directly.
 
 ## Tests and balance
-`godot --headless --path . -s tests/run_tests.gd` runs the logic tests.
+`godot --headless --path . -s tests/run_tests.gd` runs the logic tests, including random full runs that check the game never gets stuck.
 
-`godot --headless --path . -s tests/sim.gd` plays hundreds of full runs with a greedy bot and prints win rate and how far runs get per army (set `SIM_RUNS` / `SIM_ARMY` to change).
+`godot --headless --path . -s tests/sim.gd` plays full runs with a 2-ply "decent player" and prints win rate, ante reached and round win rates (set `SIM_RUNS` / `SIM_ARMY`).
 
 ## Layout
-- `scripts/board.gd`: board and move rules
-- `scripts/game.gd`: rounds, scoring, enemy turns, shop
-- `scripts/cards.gd`: the 22 passive cards and pawn/king training
-- `scripts/main.gd`: drawing and input (placeholder art)
+- `scripts/board.gd`: board, rules (mandatory capture, chains, rule-bending flags)
+- `scripts/formations.gd`: hand-placed enemy formations
+- `scripts/relics.gd`: the 20 relics
+- `scripts/game.gd`: rounds, bot (minimax), relic triggers, shop
+- `scripts/profile.gd`: save file, unlocks
+- `scripts/main.gd`: drawing and input

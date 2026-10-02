@@ -4,10 +4,11 @@ extends SceneTree
 const Game = preload("res://scripts/game.gd")
 const Board = preload("res://scripts/board.gd")
 const Profile = preload("res://scripts/profile.gd")
-const Cards = preload("res://scripts/cards.gd")
+const Relics = preload("res://scripts/relics.gd")
+const Formations = preload("res://scripts/formations.gd")
 
 var failures := 0
-var ran_random := false
+var ran_all := false
 
 
 func check(cond: bool, label: String) -> void:
@@ -18,369 +19,276 @@ func check(cond: bool, label: String) -> void:
 		print("  FAIL ", label)
 
 
-## A game with an empty, hand-built board.
-func blank_game() -> Game:
+## A game in play with a hand-built board and a bot that never blunders.
+func blank_game(cells := {}) -> Game:
 	var g := Game.new()
 	g.new_run(1)
+	g.round_num = 2  # a Big round: no blunders
 	g.board = Board.new()
-	g.target = 100000
+	for p in cells:
+		g.board.set_cell(p, cells[p])
+	g.turns_left = 12
+	g.max_turns = 12
+	g.take_events()
 	return g
 
 
 func _init() -> void:
-	test_double_jump_scores_chain()
-	test_pawn_cannot_move_backwards()
-	test_hat_trick_doubles_mult()
-	test_round_win_opens_shop()
-	test_shop_buy_and_next_round()
-	test_training_stacks_and_costs_more()
-	test_cards()
-	test_bot_must_capture_and_chains()
-	test_antes_and_bosses()
+	test_capture_is_mandatory()
+	test_chain_jump()
+	test_pawn_crowns()
+	test_soft_lock_no_moves_loses_round()
+	test_bot_no_moves_wins_round()
+	test_out_of_turns()
+	test_win_round_keeps_survivors()
+	test_formations()
+	test_relic_rules()
+	test_relic_triggers()
+	test_bot()
+	test_shop()
 	test_profile_unlocks()
-	test_new_cards_and_armies()
-	test_out_of_turns_loses()
-	test_random_runs_do_not_crash()
-	if not ran_random:
-		failures += 1
-		print("  FAIL random play did not finish (script error?)")
-	print("FAILURES: ", failures)
-	quit(1 if failures > 0 else 0)
+	test_random_runs_never_stall()
+	ran_all = true
+	print("FAILURES ", failures)
+	quit(1 if failures > 0 or not ran_all else 0)
 
 
-func test_double_jump_scores_chain() -> void:
-	print("double jump")
-	var g := blank_game()
-	g.board.set_cell(Vector2i(1, 5), Board.PAWN)
-	g.board.set_cell(Vector2i(2, 4), Board.FOE)
-	g.board.set_cell(Vector2i(4, 2), Board.FOE)
-	g.board.set_cell(Vector2i(0, 0), Board.FOE)  # keeps the board from respawning
-	g.tap(Vector2i(1, 5))
-	check(g.legal_targets(Vector2i(1, 5)).has(Vector2i(3, 3)), "jump target offered")
-	g.tap(Vector2i(3, 3))
-	check(g.in_chain, "chain continues after first jump")
-	check(g.legal_targets(Vector2i(3, 3)) == [Vector2i(5, 1)], "only the jump is offered mid-chain")
-	g.tap(Vector2i(5, 1))
-	check(not g.in_chain, "chain ended")
-	check(g.score == 20 * 2, "2 jumps score 20 chips x 2 mult (got %d)" % g.score)
-	check(g.board.get_cell(Vector2i(2, 4)) == Board.EMPTY and g.board.get_cell(Vector2i(4, 2)) == Board.EMPTY, "jumped foes removed")
+func test_capture_is_mandatory() -> void:
+	print("capture is mandatory")
+	var g := blank_game({Vector2i(1, 4): Board.PAWN, Vector2i(5, 4): Board.PAWN, Vector2i(2, 3): Board.FOE, Vector2i(5, 0): Board.FOE})
+	check(g.must_capture(), "a capture is available")
+	check(g.movable_pieces() == [Vector2i(1, 4)], "only the capturing piece may move")
+	g.tap(Vector2i(5, 4))
+	check(g.selected != Vector2i(5, 4), "the other piece can't be selected")
 
 
-func test_pawn_cannot_move_backwards() -> void:
-	print("pawn direction")
-	var g := blank_game()
-	g.board.set_cell(Vector2i(2, 3), Board.PAWN)
-	var t := g.legal_targets(Vector2i(2, 3))
-	check(t.has(Vector2i(1, 2)) and t.has(Vector2i(3, 2)) and t.size() == 2, "pawn only steps forward")
-
-
-func test_hat_trick_doubles_mult() -> void:
-	print("hat trick card")
-	var g := blank_game()
-	g.cards = [{"id": "hattrick", "n": 0}]
-	# King zigzag: (0,3) -> (2,1) -> (4,3) -> (2,5)
-	g.board.set_cell(Vector2i(0, 3), Board.KING)
-	g.board.set_cell(Vector2i(1, 2), Board.FOE)
-	g.board.set_cell(Vector2i(3, 2), Board.FOE)
-	g.board.set_cell(Vector2i(3, 4), Board.FOE)
-	g.board.set_cell(Vector2i(5, 0), Board.FOE)  # keeps the board from respawning
-	g.tap(Vector2i(0, 3))
-	g.tap(Vector2i(2, 1))
-	g.tap(Vector2i(4, 3))
-	check(g.in_chain and g.chain_mult == 2, "2 jumps in, mult 2")
-	g.tap(Vector2i(2, 5))
-	check(g.score == 30 * 6, "3rd jump doubles mult: 30 chips x 6 (got %d)" % g.score)
-
-
-func test_round_win_opens_shop() -> void:
-	print("round win")
-	var g := blank_game()
-	g.target = 10
-	g.money = 0
-	g.board.set_cell(Vector2i(1, 5), Board.PAWN)
-	g.board.set_cell(Vector2i(2, 4), Board.FOE)
-	g.board.set_cell(Vector2i(0, 0), Board.FOE)
-	g.tap(Vector2i(1, 5))
-	g.tap(Vector2i(3, 3))
-	check(g.state == "shop", "state is shop")
-	check(g.money == 3 + g.turns_left, "earned $3 + turns left (got %d)" % g.money)
-	check(g.shop.size() == 5, "shop stocked")
-
-
-func test_shop_buy_and_next_round() -> void:
-	print("shop")
-	var g := blank_game()
-	g.state = "shop"
-	g.money = 100
-	g.roll_shop()
-	check(g.shop.size() == 5, "shop has 3 cards and 2 training (got %d)" % g.shop.size())
-	var id: String = g.shop[0].id
-	check(g.buy(0), "buy card succeeds")
-	check(g.has(id), "card owned")
-	check(g.reroll(), "reroll succeeds")
-	check(not g.shop.any(func(it): return it.kind == "card" and it.id == id), "owned card not re-offered")
-	g.cards = []
-	for i in 5:
-		g.cards.append({"id": "heavy", "n": 0})
-	g.shop = [{"kind": "card", "id": "opener"}]
-	check(not g.can_buy(0), "can't buy a card with all 5 slots full")
-	var before := g.money
-	check(g.sell(0) and g.money == before + 2 and g.cards.size() == 4, "selling refunds half price")
-	g.next_round()
-	check(g.round_num == 2 and g.state == "play", "round 2 starts")
-	check(g.target == Game.target_for(2) and g.target > Game.target_for(1), "round 2 target is higher (got %d)" % g.target)
-
-
-func test_training_stacks_and_costs_more() -> void:
-	print("training")
-	var g := blank_game()
-	g.state = "shop"
-	g.money = 100
-	g.shop = [{"kind": "train", "id": "pawn_mult"}, {"kind": "train", "id": "pawn_mult"}]
-	check(g.item_cost(g.shop[0]) == 4, "first Pawn Fervor costs $4")
-	g.buy(0)
-	check(g.item_cost(g.shop[0]) == 6, "second costs $6")
-	g.buy(0)
-	check(g.levels.pawn.mult == 2, "pawn mult level 2")
-	g.state = "play"
-	g.board = Board.new()
-	g.board.set_cell(Vector2i(1, 5), Board.PAWN)
-	g.board.set_cell(Vector2i(2, 4), Board.FOE)
-	g.board.set_cell(Vector2i(5, 0), Board.FOE)
-	g.tap(Vector2i(1, 5))
-	g.tap(Vector2i(3, 3))
-	check(g.score == 10 * 3, "pawn jump scores 10 chips x 3 mult (got %d)" % g.score)
-
-
-func jump_once(g: Game) -> void:
-	g.board.set_cell(Vector2i(1, 5), Board.PAWN)
-	g.board.set_cell(Vector2i(2, 4), Board.FOE)
-	g.board.set_cell(Vector2i(5, 0), Board.FOE)
-	g.tap(Vector2i(1, 5))
-	g.tap(Vector2i(3, 3))
-
-
-func test_cards() -> void:
-	print("passive cards")
-	var g := blank_game()
-	g.cards = [{"id": "heavy", "n": 0}, {"id": "opener", "n": 0}]
-	jump_once(g)
-	check(g.score == 16 * 4, "Heavy Crown + Opening Gambit: 16 chips x 4 mult (got %d)" % g.score)
-	check(g.take_fx().size() == 2, "both cards report a trigger")
-
-	g = blank_game()
-	g.cards = [{"id": "heavy", "n": 0}, {"id": "echo", "n": 0}]
-	jump_once(g)
-	check(g.score == 22 * 1, "Echo retriggers Heavy Crown: 22 chips (got %d)" % g.score)
-
-	g = blank_game()
-	g.cards = [{"id": "patient", "n": 0}]
-	g.board.set_cell(Vector2i(0, 5), Board.PAWN)
-	g.board.set_cell(Vector2i(5, 0), Board.FOE)
+func test_chain_jump() -> void:
+	print("chain jump")
+	var g := blank_game({Vector2i(0, 5): Board.PAWN, Vector2i(1, 4): Board.FOE, Vector2i(3, 2): Board.FOE, Vector2i(5, 0): Board.FOE})
 	g.tap(Vector2i(0, 5))
-	g.tap(Vector2i(1, 4))  # quiet move banks +4
-	g.board = Board.new()
-	jump_once(g)
-	check(g.score == 10 * 5, "Patient Hand spends banked +4 mult (got %d)" % g.score)
-	check(g.cards[0].n == 0, "bank emptied")
+	g.tap(Vector2i(2, 3))
+	check(g.in_chain, "after the first jump the chain continues")
+	g.tap(Vector2i(4, 1))
+	check(g.run_stats.max_chain == 2, "two pieces captured in one move")
 
-	g = blank_game()
-	g.cards = [{"id": "doubleagent", "n": 0}]
-	jump_once(g)
-	check(g.score == 10 * 2, "Double Agent x1.5 on mult 1 rounds to 2 (got %d)" % g.score)
 
-	g = blank_game()
-	g.cards = [{"id": "martyr", "n": 0}]
-	g._trigger("lost_piece", {"count": 2})
-	check(g.cards[0].n == 4, "Martyr grows +2 per lost piece")
-	jump_once(g)
-	check(g.score == 10 * 5, "Martyr adds its mult (got %d)" % g.score)
+func test_pawn_crowns() -> void:
+	print("crowning")
+	var g := blank_game({Vector2i(1, 2): Board.PAWN, Vector2i(2, 1): Board.FOE, Vector2i(5, 4): Board.FOE})
+	g.tap(Vector2i(1, 2))
+	g.tap(Vector2i(3, 0))
+	check(g.run_stats.crowns == 1, "a pawn reaching the far row crowns")
 
-	g = blank_game()
-	g.cards = [{"id": "kingmaker", "n": 0}]
-	g.board.set_cell(Vector2i(2, 1), Board.PAWN)
-	g.board.set_cell(Vector2i(5, 4), Board.FOE)
+
+func test_soft_lock_no_moves_loses_round() -> void:
+	print("soft lock: player with no moves")
+	# The only pawn is blocked: forward square occupied, jump landing occupied.
+	var g := blank_game({Vector2i(0, 5): Board.PAWN, Vector2i(1, 4): Board.FOE, Vector2i(2, 3): Board.FOE, Vector2i(5, 0): Board.FOE})
+	g.hearts = 3
+	check(g._check_round_over(), "a blocked player ends the round")
+	check(g.state == "shop" and g.hearts == 2, "the round is lost, costing a life")
+	check(g.army == [Board.PAWN], "the blocked pawn survives into the shop")
+
+
+func test_bot_no_moves_wins_round() -> void:
+	print("bot with no moves")
+	var g := blank_game({Vector2i(1, 4): Board.PAWN, Vector2i(0, 5): Board.FOE})
+	var money: int = g.money
+	g._check_round_over()
+	check(g.state == "shop" and g.last_result == "won", "a stuck bot loses the round")
+	check(g.money > money, "won rounds pay")
+
+
+func test_out_of_turns() -> void:
+	print("turn limit")
+	var g := blank_game({Vector2i(1, 4): Board.PAWN, Vector2i(5, 0): Board.FOE})
+	g.turns_left = 1
+	g.tap(Vector2i(1, 4))
+	g.tap(Vector2i(0, 3))
+	check(g.state == "shop" and g.last_result == "lost", "running out of turns loses the round")
+
+
+func test_win_round_keeps_survivors() -> void:
+	print("army persists")
+	var g := blank_game({Vector2i(1, 4): Board.PAWN, Vector2i(3, 4): Board.KING, Vector2i(2, 3): Board.FOE})
+	g.tap(Vector2i(1, 4))
+	g.tap(Vector2i(3, 2))
+	check(g.state == "shop", "capturing the last enemy wins")
+	check(g.army.size() == 2 and g.army.has(Board.KING), "survivors carry over")
+	var n := Formations.build(g.formation, g.ante()).size()
+	g.next_round()
+	check(g.state == "play" and g.board.count_side(1) == 2, "next round places the army")
+	check(g.board.count_side(-1) == n, "the previewed formation is placed")
+
+
+func test_formations() -> void:
+	print("formations")
+	var ok := true
+	for stage in 3:
+		for f in Formations.pool(stage):
+			for ante in range(1, 8):
+				var seen := {}
+				for p in Formations.build(f, ante):
+					var c := Vector2i(p[0], p[1])
+					if not Board.is_dark(c) or c.y > 2 or seen.has(c):
+						ok = false
+					seen[c] = true
+	check(ok, "every formation uses distinct dark squares in the enemy rows")
+	check(Formations.build(Formations.SMALL[0], 3).size() == 5, "later antes add pieces")
+
+
+func test_relic_rules() -> void:
+	print("relic rules")
+	var g := blank_game({Vector2i(2, 3): Board.PAWN, Vector2i(3, 4): Board.FOE, Vector2i(5, 0): Board.FOE})
+	check(not g.must_capture(), "pawns can't capture backwards by default")
+	g.relics = ["backstab"]
+	check(g.must_capture(), "Backstab allows backward captures")
+	g = blank_game({Vector2i(1, 4): Board.PAWN, Vector2i(5, 0): Board.FOE})
+	g.relics = ["sprint"]
+	check(g.legal_targets(Vector2i(1, 4)).has(Vector2i(3, 2)), "Sprint steps two squares")
+	g = blank_game({Vector2i(1, 4): Board.KING, Vector2i(4, 1): Board.FOE})
+	g.relics = ["flying"]
+	check(g.legal_targets(Vector2i(1, 4)).has(Vector2i(5, 0)), "Flying Kings capture at range")
+	g = blank_game({Vector2i(3, 2): Board.PAWN, Vector2i(5, 0): Board.FOE})
+	g.relics = ["early"]
+	g.tap(Vector2i(3, 2))
 	g.tap(Vector2i(2, 1))
-	g.tap(Vector2i(1, 0))
-	check(g.board.get_cell(Vector2i(1, 0)) == Board.KING, "pawn crowned")
-	check(g.score == 30 * 10, "Kingmaker scores on a quiet crowning (got %d)" % g.score)
-
-
-func test_bot_must_capture_and_chains() -> void:
-	print("bot")
-	var g := blank_game()
-	g.board.set_cell(Vector2i(0, 1), Board.FOE)
-	g.board.set_cell(Vector2i(1, 2), Board.PAWN)
-	g.board.set_cell(Vector2i(3, 4), Board.PAWN)
-	g.board.set_cell(Vector2i(5, 0), Board.FOE)
-	var moves := g.bot_moves(g.board)
-	check(moves.size() == 1, "capture is mandatory: only 1 legal move (got %d)" % moves.size())
-	check(moves[0].captured.size() == 2 and moves[0].path.back() == Vector2i(4, 5), "bot double-jumps to (4,5)")
-	g.round_num = 99  # no blunders
-	g._bot_turn()
-	check(g.board.get_cell(Vector2i(4, 5)) == Board.FOE_KING, "bot piece crowned on your back row")
-	check(g.board.positions_of(Board.is_player).is_empty(), "both pawns taken")
-
-
-func test_antes_and_bosses() -> void:
-	print("antes and bosses")
-	check(Game.target_for(1) == Game.ANTE_BASE[0] and Game.target_for(3) > Game.target_for(2) and Game.target_for(4) == Game.ANTE_BASE[1], "ante targets follow ANTE_BASE x stage scale")
-	check(Game.target_for(24) == int(round(Game.ANTE_BASE[7] * Game.STAGE_SCALE[2] / 10.0)) * 10, "ante 8 boss target (got %d)" % Game.target_for(24))
-	check(Game.target_for(25) > Game.target_for(24) / 2, "endless keeps growing")
-	var g := Game.new()
-	g.new_run(3)
-	g.round_num = 3
-	g.boss = "short"
-	g.start_round()
-	check(g.turns_left == 4, "Short Fuse removes a turn")
-	g.round_num = 3
-	g.boss = "crowned"
-	g.start_round()
-	check(g.board.positions_of(func(v): return v == Board.FOE).is_empty(), "Crowned: all enemies are kings")
-	g = blank_game()
+	check(g.run_stats.crowns == 1, "Early Crown crowns on row 1")
+	g = blank_game({Vector2i(3, 4): Board.KING, Vector2i(2, 3): Board.FOE, Vector2i(5, 0): Board.FOE})
+	g.relics = ["iron"]
+	check(g.board.legal_moves(-1, g.foe_rules(), g.player_rules()).all(func(m): return m.caps.is_empty()), "Iron Kings can't be captured")
 	g.round_num = 3
 	g.boss = "silence"
-	g.cards = [{"id": "heavy", "n": 0}, {"id": "echo", "n": 0}]
-	jump_once(g)
-	check(g.score == 10, "Silence disables the leftmost card and its echo (got %d)" % g.score)
-	# Winning the final boss ends the run in victory, then endless continues.
-	g = blank_game()
-	g.round_num = 24
-	g.target = 10
-	jump_once(g)
-	check(g.state == "won", "beating ante 8 boss wins the run")
-	g.continue_endless()
-	check(g.state == "shop" and g.endless, "endless continues to the shop")
+	check(not g.has("iron"), "Silence disables the leftmost relic")
+	g = blank_game({Vector2i(5, 4): Board.PAWN, Vector2i(1, 4): Board.FOE})
+	g._bot_turn()
+	check(g.board.count_side(-1) == 0 and g.turns_left == 12 - Game.BREAKTHROUGH_COST, "an enemy pawn breaking through costs turns")
+	g = blank_game({Vector2i(5, 4): Board.PAWN, Vector2i(1, 4): Board.FOE})
+	g.relics = ["undertow"]
+	var cash: int = g.money
+	g._bot_turn()
+	check(g.turns_left == 12 and g.money == cash + 2, "Undertow turns breakthroughs into gold")
+
+
+func test_relic_triggers() -> void:
+	print("relic triggers")
+	var g := blank_game({Vector2i(0, 5): Board.PAWN, Vector2i(1, 4): Board.FOE, Vector2i(3, 2): Board.FOE, Vector2i(5, 0): Board.FOE, Vector2i(1, 0): Board.FOE})
+	g.relics = ["bounty", "hunter", "momentum"]
+	var money: int = g.money
+	g.tap(Vector2i(0, 5))
+	g.tap(Vector2i(2, 3))
+	g.tap(Vector2i(4, 1))
+	check(g.money == money + 4, "Bounty +$2 and Hunter +$2")
+	check(g.message == "Move again!" and g.turns_left == 11, "Momentum grants another move")
+	g = blank_game({Vector2i(2, 3): Board.PAWN, Vector2i(4, 5): Board.PAWN, Vector2i(1, 2): Board.FOE, Vector2i(5, 0): Board.FOE})
+	g.relics = ["bomb"]
+	g._bot_turn()
+	check(g.board.get_cell(Vector2i(3, 4)) == Board.EMPTY and g.board.count_side(-1) == 1, "Powder Keg destroys the capturer")
+	g = blank_game({Vector2i(2, 3): Board.PAWN, Vector2i(1, 2): Board.FOE, Vector2i(5, 0): Board.FOE})
+	g.relics = ["phoenix"]
+	g._bot_turn()
+	check(g.board.count_side(1) == 1 and g.phoenix_used, "Phoenix revives the lost piece")
+	g = blank_game({Vector2i(1, 2): Board.PAWN, Vector2i(2, 1): Board.FOE, Vector2i(4, 1): Board.FOE, Vector2i(0, 1): Board.FOE})
+	g.relics = ["blast"]
+	g.tap(Vector2i(1, 2))
+	g.tap(Vector2i(3, 0))
+	check(g.board.count_side(-1) == 1 and g.run_stats.crowns == 1, "Coronation Blast clears neighbours on crowning")
+	g = Game.new()
+	g.new_run(3)
+	g.relics = ["scout"]
+	g.state = "shop"
+	var n := Formations.build(g.formation, g.ante()).size()
 	g.next_round()
-	check(g.ante() == 9 and g.state == "play", "ante 9 starts")
-	# Next boss is known in the shop before round 3.
-	g = blank_game()
-	g.round_num = 2
-	g.target = 10
-	jump_once(g)
-	check(g.state == "shop" and Game.BOSSES.has(g.boss), "upcoming boss is chosen in the shop")
-	var b := g.boss
+	check(g.board.count_side(-1) == n - 1, "Scout removes one enemy at round start")
+
+
+func test_bot() -> void:
+	print("bot")
+	var g := blank_game({Vector2i(2, 3): Board.PAWN, Vector2i(1, 2): Board.FOE, Vector2i(5, 0): Board.FOE, Vector2i(5, 4): Board.PAWN})
+	g._bot_turn()
+	check(g.board.count_side(1) == 1, "the bot must capture")
+	var safe := 0
+	for i in 20:
+		var h := blank_game({Vector2i(3, 4): Board.PAWN, Vector2i(1, 2): Board.FOE, Vector2i(5, 0): Board.FOE})
+		h.rng.seed = i
+		h._bot_turn()
+		if h.board.get_cell(Vector2i(2, 3)) == Board.EMPTY:
+			safe += 1
+	check(safe == 20, "the bot doesn't hang a piece (%d/20)" % safe)
+	var a := Game.new()
+	a.new_run(1)
+	check(a.bot_depth() == 1 and a.bot_blunder_chance() > 0.0, "the first round is gentle")
+	a.round_num = 9
+	check(a.bot_depth() >= 3, "bosses later think deeper")
+
+
+func test_shop() -> void:
+	print("shop")
+	var g := blank_game({Vector2i(1, 4): Board.PAWN, Vector2i(2, 3): Board.FOE})
+	g.tap(Vector2i(1, 4))
+	g.tap(Vector2i(3, 2))
+	check(g.state == "shop" and g.shop.size() == Game.SHOP_RELICS, "the shop offers relics")
+	g.money = 30
+	var id: String = g.shop[0]
+	check(g.buy(0) and g.relics == [id] and not g.shop.has(id), "buy a relic")
+	check(g.recruit() and g.army.size() == 2, "recruit a pawn")
+	check(g.crown_pawn() and g.army.has(Board.KING), "crown a pawn")
+	var before: int = g.money
+	var value := g.sell_value(0)
+	check(g.sell(0) and g.money == before + value and g.relics.is_empty(), "sell a relic")
+	g.army = []
 	g.next_round()
-	check(g.boss == b and g.stage() == 2, "boss round uses the previewed boss")
+	check(g.state == "lost", "an empty army ends the run")
 
 
 func test_profile_unlocks() -> void:
 	print("profile")
-	var p := Profile.new()
-	p.path = "user://test_profile.json"
-	var g := blank_game()
-	g.unlocked = p.data.unlocked.duplicate()
-	g.state = "shop"
-	for k in 30:
-		g.roll_shop()
-		for it in g.shop:
-			if it.kind == "card" and not Profile.STARTER.has(it.id):
-				check(false, "shop offered locked card " + it.id)
-				return
-	check(true, "shop only offers unlocked cards")
-	g.run_stats.max_chain = 3
-	var fresh := p.check_unlocks(g)
-	check(fresh.has("hattrick") and g.unlocked.has("hattrick"), "3-jump chain unlocks Hat Trick")
-	p.data.runs = 7
-	p.save_profile()
-	var q := Profile.new()
-	q.path = p.path
-	q.load_profile()
-	check(q.data.runs == 7 and q.is_unlocked("hattrick"), "profile survives save and load")
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(p.path))
+	var pr := Profile.new()
+	pr.path = "user://test_profile.json"
+	var g := Game.new()
+	g.new_run(5)
+	g.round_num = 4  # ante 2
+	g.run_stats.king_captures = 1
+	var fresh := pr.check_unlocks(g)
+	check(fresh.has("early") and fresh.has("executioner") and fresh.has("army:merchant"), "milestones unlock relics and armies")
+	pr.end_run(g, false)
+	check(pr.data.runs == 1 and pr.data.best_ante == 2, "the run is recorded")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(pr.path))
 
 
-func test_new_cards_and_armies() -> void:
-	print("new cards, bosses, armies")
-	var g := blank_game()
-	g.cards = [{"id": "copycat", "n": 0}, {"id": "heavy", "n": 0}]
-	jump_once(g)
-	check(g.score == 22, "Copycat copies Heavy Crown (got %d)" % g.score)
-	g = blank_game()
-	g.cards = [{"id": "zigzag", "n": 0}]
-	g.board.set_cell(Vector2i(0, 3), Board.KING)
-	g.board.set_cell(Vector2i(1, 2), Board.FOE)
-	g.board.set_cell(Vector2i(3, 2), Board.FOE)
-	g.board.set_cell(Vector2i(5, 0), Board.FOE)
-	g.tap(Vector2i(0, 3))
-	g.tap(Vector2i(2, 1))
-	g.tap(Vector2i(4, 3))
-	check(g.score == 32 * 2, "Zigzag adds +12 on a direction change (got %d)" % g.score)
-	g = blank_game()
-	g.cards = [{"id": "phoenix", "n": 0}]
-	g.board.set_cell(Vector2i(0, 1), Board.FOE)
-	g.board.set_cell(Vector2i(1, 2), Board.PAWN)
-	g.round_num = 99
-	g._bot_turn()
-	check(g.board.positions_of(Board.is_player).size() == 1, "Phoenix revives the captured piece")
-	g = blank_game()
-	g.round_num = 3
-	g.boss = "taxman"
-	g.money = 5
-	g.board.set_cell(Vector2i(0, 5), Board.PAWN)
-	g.board.set_cell(Vector2i(5, 0), Board.FOE)
-	g.tap(Vector2i(0, 5))
-	g.tap(Vector2i(1, 4))
-	check(g.money == 4, "Tax Man charges $1 for a quiet move")
-	g = Game.new()
-	g.army = "crowned"
-	g.new_run(1)
-	check(g.board.positions_of(func(v): return v == Board.KING).size() == 1 and g.board.positions_of(Board.is_player).size() == 4, "Crowned Few starts with 1 king + 3 pawns")
-	g = Game.new()
-	g.army = "merchant"
-	g.new_run(1)
-	check(g.money == 14, "Merchant starts with $14")
-
-
-func test_out_of_turns_loses() -> void:
-	print("lose")
-	var g := blank_game()
-	g.turns_left = 1
-	g.board.set_cell(Vector2i(1, 5), Board.PAWN)
-	g.board.set_cell(Vector2i(4, 0), Board.FOE)
-	g.tap(Vector2i(1, 5))
-	g.tap(Vector2i(0, 4))
-	check(g.state == "lost", "run lost when turns run out")
-
-
-## Random-play smoke test: many runs of random legal taps must never error or stall.
-func test_random_runs_do_not_crash() -> void:
-	print("random play")
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 42
-	var best := 0
-	for run in 200:
+## Random legal play must never reach a state where the round goes on but the player can't act.
+func test_random_runs_never_stall() -> void:
+	print("random runs")
+	var stalls := 0
+	var finished := 0
+	for seed_i in 40:
 		var g := Game.new()
-		g.army = Game.ARMIES.keys()[run % Game.ARMIES.size()]
-		g.new_run(run)
-		# Fuzz: random 5-card loadout so every card effect gets exercised.
-		var ids := Cards.ALL.keys()
-		for k in 5:
-			g.cards.append({"id": ids[rng.randi_range(0, ids.size() - 1)], "n": 0})
-		for step in 400:
+		g.army_id = Game.ARMIES.keys()[seed_i % Game.ARMIES.size()]
+		g.new_run(100 + seed_i)
+		var r := RandomNumberGenerator.new()
+		r.seed = seed_i
+		for step in 3000:
+			if g.state == "won" or g.state == "lost":
+				finished += 1
+				break
 			if g.state == "shop":
-				for i in range(g.shop.size() - 1, -1, -1):
-					g.buy(i)
+				for k in 3:
+					if g.can_buy(0):
+						g.buy(0)
+				if g.can_recruit():
+					g.recruit()
 				g.next_round()
 				continue
-			if g.state == "lost":
+			var mv := g.movable_pieces()
+			if mv.is_empty():
+				stalls += 1
 				break
-			var moves: Array = []
-			for p in g.board.positions_of(Board.is_player):
-				if g.in_chain and p != g.selected:
-					continue
-				for t in g.legal_targets(p):
-					moves.append([p, t])
-			if moves.is_empty():
-				g.state = "lost"  # stuck: no legal move (counted as loss for the smoke test)
-				break
-			# Prefer jumps, like a player would.
-			var jumps := moves.filter(func(m): return absi(m[1].x - m[0].x) == 2)
-			var pick: Array = (jumps if not jumps.is_empty() else moves)[rng.randi_range(0, (jumps if not jumps.is_empty() else moves).size() - 1)]
 			if not g.in_chain:
-				g.tap(pick[0])
-			g.tap(pick[1])
-		best = maxi(best, g.round_num)
-	ran_random = true
-	print("  best round reached by random greedy play: ", best)
-	check(best >= 2, "random greedy play can clear round 1")
+				g.tap(mv[r.randi_range(0, mv.size() - 1)])
+			var t := g.legal_targets(g.selected)
+			if t.is_empty():
+				stalls += 1
+				break
+			g.tap(t[r.randi_range(0, t.size() - 1)])
+	check(stalls == 0, "no stuck states in 40 random runs (%d stalls)" % stalls)
+	check(finished == 40, "every random run ends (%d/40)" % finished)

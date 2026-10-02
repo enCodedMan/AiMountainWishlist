@@ -1,37 +1,27 @@
 extends RefCounted
-## Persistent player profile: settings, lifetime stats and card unlocks.
+## Persistent player profile: settings, lifetime stats and relic unlocks.
 
 const PATH := "user://profile.json"
 
-## Cards available from the very first run. The rest unlock through play.
+## Relics available from the very first run. The rest unlock through play.
 const STARTER := [
-	"heavy", "opener", "pawnpride", "royalblood", "bounty", "golddigger",
-	"longjump", "piggy", "patient", "momentum", "redcarpet", "reinforce",
-	"steady", "edge", "deepstrike", "goldsmith", "firstblood", "pairs",
-	"fortress", "underdog", "court", "greed", "zigzag", "rhythm",
+	"backstab", "sprint", "phoenix", "bomb", "blast", "bounty",
+	"hunter", "greed", "piggy", "recruiter", "scout", "momentum",
 ]
 
 const UNLOCK_HINTS := {
-	"hattrick": "Make a 3-jump chain",
-	"snowball": "Reach ante 2",
+	"early": "Reach ante 2",
+	"lightning": "Capture 3 pieces in one move",
 	"executioner": "Capture an enemy king",
-	"martyr": "Lose 10 pieces in total",
-	"blast": "Crown 3 pawns in total",
-	"kingmaker": "Crown 8 pawns in total",
-	"doubleagent": "Score 500 in a single move",
-	"laststand": "Clear a round with only 1 piece left",
-	"cleansweep": "Capture 100 enemies in total",
-	"echo": "Reach ante 4",
-	"tyrant": "Have 3 kings at once",
-	"phoenix": "Lose 30 pieces in total",
-	"copycat": "Win a run",
-	"overtime": "Reach ante 6",
-	"midas": "Score 2000 in a single move",
-	"collector": "Capture 250 enemies in total",
+	"rush": "Crown 3 pawns in total",
+	"fortress": "Lose 10 pieces in total",
+	"undertow": "Reach ante 3",
+	"flying": "Crown 8 pawns in total",
+	"iron": "Beat 2 bosses in total",
 }
 
 const ARMY_HINTS := {
-	"merchant": "Reach ante 3",
+	"merchant": "Reach ante 2",
 	"crowned": "Crown 5 pawns in total",
 	"militia": "Lose 20 pieces in total",
 }
@@ -46,7 +36,7 @@ func _init() -> void:
 
 func _defaults() -> Dictionary:
 	return {
-		"unlocked": STARTER.duplicate(), "runs": 0, "wins": 0, "best_ante": 0, "best_move": 0,
+		"unlocked": STARTER.duplicate(), "runs": 0, "wins": 0, "best_ante": 0, "bosses": 0,
 		"captures": 0, "crowns": 0, "lost": 0, "sfx": true, "shake": true,
 		"armies": ["classic"], "army": "classic",
 	}
@@ -60,6 +50,8 @@ func load_profile() -> void:
 	if parsed is Dictionary:
 		for k in parsed:
 			data[k] = parsed[k]
+	var Relics = load("res://scripts/relics.gd")
+	data.unlocked = data.unlocked.filter(func(id): return Relics.ALL.has(id))
 	for id in STARTER:
 		if not data.unlocked.has(id):
 			data.unlocked.append(id)
@@ -78,40 +70,22 @@ func is_unlocked(id: String) -> bool:
 func _met(id: String, game) -> bool:
 	var rs: Dictionary = game.run_stats
 	match id:
-		"hattrick":
-			return rs.max_chain >= 3
-		"snowball":
+		"early", "merchant":
 			return game.ante() >= 2
+		"lightning":
+			return rs.max_chain >= 3
 		"executioner":
 			return rs.king_captures >= 1
-		"martyr":
-			return data.lost + rs.lost >= 10
-		"blast":
+		"rush":
 			return data.crowns + rs.crowns >= 3
-		"kingmaker":
-			return data.crowns + rs.crowns >= 8
-		"doubleagent":
-			return rs.best_move >= 500
-		"laststand":
-			return rs.lone_clear
-		"cleansweep":
-			return data.captures + rs.captures >= 100
-		"echo":
-			return game.ante() >= 4
-		"tyrant":
-			return game.board.positions_of(func(v): return v == 2).size() >= 3
-		"phoenix":
-			return data.lost + rs.lost >= 30
-		"copycat":
-			return data.wins >= 1 or game.state == "won"
-		"overtime":
-			return game.ante() >= 6
-		"midas":
-			return rs.best_move >= 2000
-		"collector":
-			return data.captures + rs.captures >= 250
-		"merchant":
+		"fortress":
+			return data.lost + rs.lost >= 10
+		"undertow":
 			return game.ante() >= 3
+		"flying":
+			return data.crowns + rs.crowns >= 8
+		"iron":
+			return data.get("bosses", 0) + rs.bosses >= 2
 		"crowned":
 			return data.crowns + rs.crowns >= 5
 		"militia":
@@ -143,7 +117,7 @@ func end_run(game, won: bool) -> void:
 	if won:
 		data.wins += 1
 	data.best_ante = maxi(int(data.best_ante), game.ante())
-	data.best_move = maxi(int(data.best_move), int(rs.best_move))
+	data.bosses = int(data.get("bosses", 0)) + rs.bosses
 	data.captures += rs.captures
 	data.crowns += rs.crowns
 	data.lost += rs.lost
