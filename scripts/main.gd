@@ -6,6 +6,7 @@ const Board = preload("res://scripts/board.gd")
 const Cards = preload("res://scripts/cards.gd")
 const Sfx = preload("res://scripts/sfx.gd")
 const Profile = preload("res://scripts/profile.gd")
+const Steam = preload("res://scripts/steam.gd")
 
 const W := 480.0
 const H := 860.0
@@ -77,9 +78,38 @@ func _ready() -> void:
 	sfx = Sfx.new()
 	add_child(sfx)
 	profile.load_profile()
+	get_tree().set_quit_on_go_back(false)
+	Steam.start()
+	_fit_safe_area()
 	game.unlocked = profile.data.unlocked.duplicate()
 	game.new_run()
 	shown_score = game.score
+
+
+## Keep the layout clear of notches and rounded corners on phones.
+func _fit_safe_area() -> void:
+	if not OS.has_feature("mobile"):
+		return
+	var win := DisplayServer.window_get_size()
+	var safe := DisplayServer.get_display_safe_area()
+	if win.y <= 0:
+		return
+	var top := float(safe.position.y) / win.y * H
+	var bottom := float(win.y - safe.end.y) / win.y * H
+	var k := (H - top - bottom) / H
+	scale = Vector2(k, k)
+	position = Vector2(W * (1.0 - k) / 2.0, top)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		if screen == "game":
+			_to_title()
+		elif screen == "collection":
+			screen = "title"
+		queue_redraw()
+	elif what == NOTIFICATION_WM_SIZE_CHANGED:
+		_fit_safe_area()
 
 
 func _start_run() -> void:
@@ -115,6 +145,7 @@ func _process(delta: float) -> void:
 	var evs := game.take_events()
 	if not evs.is_empty():
 		for id in profile.check_unlocks(game):
+			Steam.achieve(id)
 			if id.begins_with("army:"):
 				toasts.append({"text": "New army unlocked: " + Game.ARMIES[id.substr(5)].name, "t": 0.0})
 			else:
@@ -122,6 +153,8 @@ func _process(delta: float) -> void:
 	if (game.state == "lost" or game.state == "won") and not run_recorded and screen == "game":
 		run_recorded = true
 		profile.end_run(game, game.state == "won")
+		if game.state == "won":
+			Steam.achieve("win")
 	for t in toasts:
 		t.t += delta
 	toasts = toasts.filter(func(t): return t.t < 3.0)
