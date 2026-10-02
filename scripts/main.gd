@@ -149,18 +149,24 @@ func _draw() -> void:
 	_draw_detail_bar(Rect2(24, 816, W - 48, 38))
 	if game.state == "lost":
 		_draw_lost()
+	elif game.state == "won":
+		_draw_won()
 
 
 func _draw_top_bar() -> void:
 	_text("KINGJUMP", Vector2(24, 46), 24, C_ACCENT)
-	_pill(Rect2(W - 236, 22, 104, 32), "Round %d" % game.round_num)
+	var stage_col := C_MULT if game.stage() == 2 else C_TEXT
+	_pill(Rect2(W - 272, 22, 140, 32), "Ante %d · %s" % [game.ante(), Game.STAGE_NAMES[game.stage()]], stage_col)
 	_pill(Rect2(W - 124, 22, 100, 32), "$%d" % game.money, C_ACCENT)
 
 
 func _draw_score_panel() -> void:
 	var r := Rect2(24, 68, W - 48, 96)
 	_box(r, C_PANEL, 14, C_BORDER, 1)
-	_text("ROUND SCORE", r.position + Vector2(16, 26), 12, C_MUTED)
+	if game.stage() == 2 and game.boss != "":
+		_text("BOSS: " + Game.BOSSES[game.boss].name.to_upper(), r.position + Vector2(16, 26), 12, C_MULT)
+	else:
+		_text("ROUND SCORE", r.position + Vector2(16, 26), 12, C_MUTED)
 	_text(str(int(shown_score)), r.position + Vector2(16, 64), 36)
 	_text("/ %d" % game.target, r.position + Vector2(0, 64), 18, C_MUTED, r.size.x - 16, HORIZONTAL_ALIGNMENT_RIGHT)
 	# Turns as dots
@@ -261,6 +267,8 @@ func _draw_detail_bar(r: Rect2) -> void:
 	if sel_card < 0 or sel_card >= game.cards.size():
 		sel_card = -1
 		var hint := "Tap a card to inspect, reorder or sell it."
+		if game.state == "play" and game.stage() == 2 and game.boss != "":
+			hint = "Boss rule: " + Game.BOSSES[game.boss].desc
 		if game.state == "play" and game.message != "" and not game.message.begins_with("+"):
 			hint = game.message
 		_text(hint, r.position + Vector2(0, 25), 14, C_MUTED, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
@@ -318,7 +326,12 @@ func _draw_shop() -> void:
 	_draw_card_row(Vector2(24, 600), true)
 	_draw_detail_bar(Rect2(24, 716, W - 48, 38))
 	_button(Rect2(24, 784, 160, 52), "Reroll $%d" % Game.REROLL_COST, func(): game.reroll(), game.money >= Game.REROLL_COST)
-	_button(Rect2(196, 784, W - 220, 52), "Next round", func():
+	var next_r: int = game.round_num + 1
+	var next_label := "Next: %s round" % Game.STAGE_NAMES[Game.stage_of(next_r)]
+	if Game.stage_of(next_r) == 2 and game.boss != "":
+		_text("Next boss: %s. %s" % [Game.BOSSES[game.boss].name, Game.BOSSES[game.boss].desc], Vector2(24, 774), 13, C_MULT, W - 48, HORIZONTAL_ALIGNMENT_CENTER)
+		next_label = "Next: Boss round"
+	_button(Rect2(196, 784, W - 220, 52), next_label, func():
 		sel_card = -1
 		game.next_round()
 		shown_score = 0.0, true, true)
@@ -335,3 +348,16 @@ func _draw_lost() -> void:
 		sel_card = -1
 		game.new_run()
 		shown_score = 0.0, true, true)
+
+
+func _draw_won() -> void:
+	draw_rect(Rect2(0, 0, W, H), Color(C_BG, 0.85))
+	var r := Rect2(48, 280, W - 96, 280)
+	_box(r, C_PANEL, 16, C_ACCENT, 2)
+	_text("Victory!", r.position + Vector2(0, 60), 34, C_ACCENT, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+	_text(game.message, r.position + Vector2(0, 96), 15, C_MUTED, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+	_button(Rect2(r.position.x + 40, r.end.y - 136, r.size.x - 80, 52), "Keep going (endless)", func(): game.continue_endless(), true, true)
+	_button(Rect2(r.position.x + 40, r.end.y - 72, r.size.x - 80, 52), "New run", func():
+		sel_card = -1
+		game.new_run()
+		shown_score = 0.0)

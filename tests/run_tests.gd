@@ -34,6 +34,7 @@ func _init() -> void:
 	test_training_stacks_and_costs_more()
 	test_cards()
 	test_bot_must_capture_and_chains()
+	test_antes_and_bosses()
 	test_out_of_turns_loses()
 	test_random_runs_do_not_crash()
 	if not ran_random:
@@ -215,6 +216,48 @@ func test_bot_must_capture_and_chains() -> void:
 	g._bot_turn()
 	check(g.board.get_cell(Vector2i(4, 5)) == Board.FOE_KING, "bot piece crowned on your back row")
 	check(g.board.positions_of(Board.is_player).is_empty(), "both pawns taken")
+
+
+func test_antes_and_bosses() -> void:
+	print("antes and bosses")
+	check(Game.target_for(1) == 100 and Game.target_for(3) == 200 and Game.target_for(4) == 200, "ante targets: 100, boss 200, ante 2 small 200")
+	check(Game.target_for(24) == 8000, "ante 8 boss is 8000 (got %d)" % Game.target_for(24))
+	check(Game.target_for(25) > Game.target_for(24) / 2, "endless keeps growing")
+	var g := Game.new()
+	g.new_run(3)
+	g.round_num = 3
+	g.boss = "short"
+	g.start_round()
+	check(g.turns_left == 4, "Short Fuse removes a turn")
+	g.round_num = 3
+	g.boss = "crowned"
+	g.start_round()
+	check(g.board.positions_of(func(v): return v == Board.FOE).is_empty(), "Crowned: all enemies are kings")
+	g = blank_game()
+	g.round_num = 3
+	g.boss = "silence"
+	g.cards = [{"id": "heavy", "n": 0}, {"id": "echo", "n": 0}]
+	jump_once(g)
+	check(g.score == 10, "Silence disables the leftmost card and its echo (got %d)" % g.score)
+	# Winning the final boss ends the run in victory, then endless continues.
+	g = blank_game()
+	g.round_num = 24
+	g.target = 10
+	jump_once(g)
+	check(g.state == "won", "beating ante 8 boss wins the run")
+	g.continue_endless()
+	check(g.state == "shop" and g.endless, "endless continues to the shop")
+	g.next_round()
+	check(g.ante() == 9 and g.state == "play", "ante 9 starts")
+	# Next boss is known in the shop before round 3.
+	g = blank_game()
+	g.round_num = 2
+	g.target = 10
+	jump_once(g)
+	check(g.state == "shop" and Game.BOSSES.has(g.boss), "upcoming boss is chosen in the shop")
+	var b := g.boss
+	g.next_round()
+	check(g.boss == b and g.stage() == 2, "boss round uses the previewed boss")
 
 
 func test_out_of_turns_loses() -> void:

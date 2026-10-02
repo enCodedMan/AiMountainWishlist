@@ -13,6 +13,19 @@ const REROLL_COST := 1
 const SHOP_CARDS := 3
 const SHOP_TRAINING := 2
 const RARITY_WEIGHTS := [70, 25, 5]
+const WIN_ANTE := 8
+const ANTE_BASE := [100, 200, 350, 600, 1000, 1600, 2500, 4000]
+const STAGE_SCALE := [1.0, 1.5, 2.0]
+const STAGE_NAMES := ["Small", "Big", "Boss"]
+const STAGE_REWARD := [3, 4, 5]
+const BOSSES := {
+	"swift": {"name": "Swift", "desc": "The bot moves twice each turn"},
+	"short": {"name": "Short Fuse", "desc": "You get 1 fewer turn"},
+	"crowned": {"name": "Crowned", "desc": "Every enemy starts as a king"},
+	"wall": {"name": "The Wall", "desc": "3 extra enemies"},
+	"barren": {"name": "Barren", "desc": "No gold or red squares"},
+	"silence": {"name": "Silence", "desc": "Your leftmost card is disabled"},
+}
 
 var rng := RandomNumberGenerator.new()
 var board: Board
@@ -25,7 +38,9 @@ var money := 0
 var cards: Array = []  # [{"id": String, "n": int}] in trigger order; n is per-card state
 var levels := {}  # {"pawn": {"chips", "mult", "coins"}, "king": {...}}
 var training_bought := {}
-var state := "play"  # play | shop | lost
+var state := "play"  # play | shop | lost | won
+var boss := ""  # active (or, in the shop, upcoming) boss rule id
+var endless := false
 var selected := Vector2i(-1, -1)
 var in_chain := false
 var chain_jumps := 0
@@ -50,6 +65,8 @@ func new_run(seed_value: int = -1) -> void:
 	else:
 		rng.randomize()
 	round_num = 1
+	endless = false
+	boss = ""
 	money = 4
 	cards = []
 	training_bought = {}
@@ -59,8 +76,35 @@ func new_run(seed_value: int = -1) -> void:
 	start_round()
 
 
+static func ante_of(r: int) -> int:
+	return (r - 1) / 3 + 1
+
+
+static func stage_of(r: int) -> int:
+	return (r - 1) % 3
+
+
 static func target_for(r: int) -> int:
-	return int(round(100.0 * pow(1.5, r - 1) / 10.0)) * 10
+	var a := ante_of(r)
+	var base: float = ANTE_BASE[mini(a, WIN_ANTE) - 1] * pow(1.6, maxi(a - WIN_ANTE, 0))
+	return int(round(base * STAGE_SCALE[stage_of(r)] / 10.0)) * 10
+
+
+func ante() -> int:
+	return ante_of(round_num)
+
+
+func stage() -> int:
+	return stage_of(round_num)
+
+
+func is_boss(id: String) -> bool:
+	return stage() == 2 and boss == id
+
+
+func _roll_boss() -> void:
+	var ids := BOSSES.keys()
+	boss = ids[rng.randi_range(0, ids.size() - 1)]
 
 
 func has(id: String) -> bool:
@@ -70,7 +114,11 @@ func has(id: String) -> bool:
 func start_round() -> void:
 	score = 0
 	target = target_for(round_num)
-	max_turns = BASE_TURNS
+	if stage() == 2 and boss == "":
+		_roll_boss()
+	elif stage() != 2:
+		boss = ""
+	max_turns = BASE_TURNS - (1 if is_boss("short") else 0)
 	turns_left = max_turns
 	chains_this_round = 0
 	last_gain = 0
@@ -79,6 +127,8 @@ func start_round() -> void:
 	board = _generate_board()
 	state = "play"
 	message = "Score %d in %d turns" % [target, turns_left]
+	if stage() == 2:
+		message = "Boss: %s. %s" % [BOSSES[boss].name, BOSSES[boss].desc]
 	_trigger("round_start", {})
 
 
@@ -90,10 +140,10 @@ func _generate_board() -> Board:
 		b.set_cell(home[i], Board.PAWN)
 	var field := b.dark_cells_in_rows([0, 1, 2, 3])
 	_shuffle(field)
-	var foes := mini(4 + round_num, field.size() - 3)
+	var foes := mini(4 + ante() + stage() + (3 if is_boss("wall") else 0), field.size() - 3)
 	for i in foes:
-		b.set_cell(field[i], Board.FOE)
-	var bonus := [Board.Tile.GOLD, Board.Tile.GOLD, Board.Tile.RED]
+		b.set_cell(field[i], Board.FOE_KING if is_boss("crowned") else Board.FOE)
+	var bonus := [] if is_boss("barren") else [Board.Tile.GOLD, Board.Tile.GOLD, Board.Tile.RED]
 	for i in bonus.size():
 		b.set_tile(field[foes + i], bonus[i])
 	return b
@@ -202,9 +252,13 @@ func _end_move() -> void:
 		_spawn_wave()
 	if turns_left <= 0:
 		state = "lost"
-		message = "Out of turns on round %d" % round_num
+		message = "Out of turns on ante %d" % ante()
 		return
 	_bot_turn()
+	if is_boss("swift") and not board.positions_of(Board.is_player).is_empty():
+		var first := bot_last_move
+		_bot_turn()
+		bot_last_move = first + bot_last_move
 	if board.positions_of(Board.is_player).is_empty():
 		state = "lost"
 		message = "Your pieces were wiped out"
@@ -212,9 +266,25 @@ func _end_move() -> void:
 
 func _win_round() -> void:
 	_trigger("round_end", {})
-	var earned := 3 + turns_left
+	var earned: int = STAGE_REWARD[stage()] + turns_left
 	money += earned
 	message = "Round cleared! +$%d" % earned
+	boss = ""
+	if stage_of(round_num + 1) == 2:
+		_roll_boss()
+	if stage() == 2 and ante() == WIN_ANTE and not endless:
+		state = "won"
+		message = "You beat ante %d!" % WIN_ANTE
+		return
+	state = "shop"
+	roll_shop()
+
+
+## After winning, keep playing harder antes.
+func continue_endless() -> void:
+	if state != "won":
+		return
+	endless = true
 	state = "shop"
 	roll_shop()
 
@@ -230,8 +300,10 @@ func _spawn_wave() -> void:
 ## Run every card's effect for this event, left to right. Echo replays its left neighbour.
 func _trigger(event: String, ctx: Dictionary) -> void:
 	for i in cards.size():
+		if i == 0 and is_boss("silence"):
+			continue
 		if cards[i].id == "echo":
-			if i > 0 and cards[i - 1].id != "echo":
+			if i > 0 and cards[i - 1].id != "echo" and not (i == 1 and is_boss("silence")):
 				var t := _card_effect(cards[i - 1], event, ctx)
 				if t != "":
 					fx.append({"slot": i, "text": "Echo " + t})
@@ -388,7 +460,7 @@ func move_left(slot: int) -> bool:
 
 ## Chance the bot plays a random legal move instead of its best one. Drops each round.
 func bot_blunder_chance() -> float:
-	return maxf(0.5 - 0.1 * (round_num - 1), 0.1)
+	return maxf(0.45 - 0.03 * (round_num - 1), 0.1)
 
 
 ## All legal bot moves. Captures are mandatory (real checkers rules) and
