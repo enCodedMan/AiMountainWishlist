@@ -70,9 +70,9 @@ func test_pawn_cannot_move_backwards() -> void:
 
 
 func test_hat_trick_doubles_mult() -> void:
-	print("hat trick relic")
+	print("hat trick card")
 	var g := blank_game()
-	g.relics = ["third"]
+	g.cards = [{"id": "hattrick", "n": 0}]
 	# King zigzag: (0,3) -> (2,1) -> (4,3) -> (2,5)
 	g.board.set_cell(Vector2i(0, 3), Board.KING)
 	g.board.set_cell(Vector2i(1, 2), Board.FOE)
@@ -99,7 +99,7 @@ func test_round_win_opens_shop() -> void:
 	g.tap(Vector2i(3, 3))
 	check(g.state == "shop", "state is shop")
 	check(g.money == 3 + g.turns_left, "earned $3 + turns left (got %d)" % g.money)
-	check(g.shop.size() == 7, "shop stocked")
+	check(g.shop.size() == 5, "shop stocked")
 
 
 func test_shop_buy_and_next_round() -> void:
@@ -108,12 +108,19 @@ func test_shop_buy_and_next_round() -> void:
 	g.state = "shop"
 	g.money = 100
 	g.roll_shop()
-	check(g.shop.size() == 7, "shop has 3 relics, 2 cards, 2 training (got %d)" % g.shop.size())
+	check(g.shop.size() == 5, "shop has 3 cards and 2 training (got %d)" % g.shop.size())
 	var id: String = g.shop[0].id
-	check(g.buy(0), "buy relic succeeds")
-	check(g.has(id), "relic owned")
+	check(g.buy(0), "buy card succeeds")
+	check(g.has(id), "card owned")
 	check(g.reroll(), "reroll succeeds")
-	check(not g.shop.any(func(it): return it.kind == "relic" and it.id == id), "owned relic not re-offered")
+	check(not g.shop.any(func(it): return it.kind == "card" and it.id == id), "owned card not re-offered")
+	g.cards = []
+	for i in 5:
+		g.cards.append({"id": "heavy", "n": 0})
+	g.shop = [{"kind": "card", "id": "opener"}]
+	check(not g.can_buy(0), "can't buy a card with all 5 slots full")
+	var before := g.money
+	check(g.sell(0) and g.money == before + 2 and g.cards.size() == 4, "selling refunds half price")
 	g.next_round()
 	check(g.round_num == 2 and g.state == "play", "round 2 starts")
 	check(g.target == 150, "round 2 target is 150 (got %d)" % g.target)
@@ -140,23 +147,58 @@ func test_training_stacks_and_costs_more() -> void:
 	check(g.score == 10 * 3, "pawn jump scores 10 chips x 3 mult (got %d)" % g.score)
 
 
-func test_cards() -> void:
-	print("cards")
-	var g := blank_game()
-	g.hand = ["double", "overtime", "coronation"]
-	var turns := g.turns_left
-	check(g.use_card(1) and g.turns_left == turns + 1, "Overtime adds a turn")
+func jump_once(g: Game) -> void:
 	g.board.set_cell(Vector2i(1, 5), Board.PAWN)
-	check(not g.use_card(1), "Coronation needs a selected pawn")
-	g.tap(Vector2i(1, 5))
-	check(g.use_card(1) and g.board.get_cell(Vector2i(1, 5)) == Board.KING, "Coronation crowns the pawn")
-	check(g.use_card(0) and g.double_next, "Double Down armed")
 	g.board.set_cell(Vector2i(2, 4), Board.FOE)
 	g.board.set_cell(Vector2i(5, 0), Board.FOE)
 	g.tap(Vector2i(1, 5))
 	g.tap(Vector2i(3, 3))
-	check(g.score == 10 * 2, "Double Down doubles mult (got %d)" % g.score)
-	check(g.hand.is_empty(), "used cards leave the hand")
+
+
+func test_cards() -> void:
+	print("passive cards")
+	var g := blank_game()
+	g.cards = [{"id": "heavy", "n": 0}, {"id": "opener", "n": 0}]
+	jump_once(g)
+	check(g.score == 16 * 4, "Heavy Crown + Opening Gambit: 16 chips x 4 mult (got %d)" % g.score)
+	check(g.take_fx().size() == 2, "both cards report a trigger")
+
+	g = blank_game()
+	g.cards = [{"id": "heavy", "n": 0}, {"id": "echo", "n": 0}]
+	jump_once(g)
+	check(g.score == 22 * 1, "Echo retriggers Heavy Crown: 22 chips (got %d)" % g.score)
+
+	g = blank_game()
+	g.cards = [{"id": "patient", "n": 0}]
+	g.board.set_cell(Vector2i(0, 5), Board.PAWN)
+	g.board.set_cell(Vector2i(5, 0), Board.FOE)
+	g.tap(Vector2i(0, 5))
+	g.tap(Vector2i(1, 4))  # quiet move banks +4
+	g.board = Board.new()
+	jump_once(g)
+	check(g.score == 10 * 5, "Patient Hand spends banked +4 mult (got %d)" % g.score)
+	check(g.cards[0].n == 0, "bank emptied")
+
+	g = blank_game()
+	g.cards = [{"id": "doubleagent", "n": 0}]
+	jump_once(g)
+	check(g.score == 10 * 2, "Double Agent x1.5 on mult 1 rounds to 2 (got %d)" % g.score)
+
+	g = blank_game()
+	g.cards = [{"id": "martyr", "n": 0}]
+	g._trigger("lost_piece", {"count": 2})
+	check(g.cards[0].n == 4, "Martyr grows +2 per lost piece")
+	jump_once(g)
+	check(g.score == 10 * 5, "Martyr adds its mult (got %d)" % g.score)
+
+	g = blank_game()
+	g.cards = [{"id": "kingmaker", "n": 0}]
+	g.board.set_cell(Vector2i(2, 1), Board.PAWN)
+	g.board.set_cell(Vector2i(5, 4), Board.FOE)
+	g.tap(Vector2i(2, 1))
+	g.tap(Vector2i(1, 0))
+	check(g.board.get_cell(Vector2i(1, 0)) == Board.KING, "pawn crowned")
+	check(g.score == 30 * 10, "Kingmaker scores on a quiet crowning (got %d)" % g.score)
 
 
 func test_bot_must_capture_and_chains() -> void:
@@ -204,10 +246,6 @@ func test_random_runs_do_not_crash() -> void:
 			if g.state == "lost":
 				break
 			var moves: Array = []
-			if not g.in_chain and not g.hand.is_empty() and rng.randf() < 0.2:
-				var mine := g.board.positions_of(Board.is_player)
-				g.tap(mine[rng.randi_range(0, mine.size() - 1)])
-				g.use_card(rng.randi_range(0, g.hand.size() - 1))
 			for p in g.board.positions_of(Board.is_player):
 				if g.in_chain and p != g.selected:
 					continue
