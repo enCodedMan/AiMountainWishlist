@@ -4,6 +4,7 @@ extends SceneTree
 const Game = preload("res://scripts/game.gd")
 const Board = preload("res://scripts/board.gd")
 const Profile = preload("res://scripts/profile.gd")
+const Cards = preload("res://scripts/cards.gd")
 
 var failures := 0
 var ran_random := false
@@ -37,6 +38,7 @@ func _init() -> void:
 	test_bot_must_capture_and_chains()
 	test_antes_and_bosses()
 	test_profile_unlocks()
+	test_new_cards_and_armies()
 	test_out_of_turns_loses()
 	test_random_runs_do_not_crash()
 	if not ran_random:
@@ -288,6 +290,48 @@ func test_profile_unlocks() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(p.path))
 
 
+func test_new_cards_and_armies() -> void:
+	print("new cards, bosses, armies")
+	var g := blank_game()
+	g.cards = [{"id": "copycat", "n": 0}, {"id": "heavy", "n": 0}]
+	jump_once(g)
+	check(g.score == 22, "Copycat copies Heavy Crown (got %d)" % g.score)
+	g = blank_game()
+	g.cards = [{"id": "zigzag", "n": 0}]
+	g.board.set_cell(Vector2i(0, 3), Board.KING)
+	g.board.set_cell(Vector2i(1, 2), Board.FOE)
+	g.board.set_cell(Vector2i(3, 2), Board.FOE)
+	g.board.set_cell(Vector2i(5, 0), Board.FOE)
+	g.tap(Vector2i(0, 3))
+	g.tap(Vector2i(2, 1))
+	g.tap(Vector2i(4, 3))
+	check(g.score == 32 * 2, "Zigzag adds +12 on a direction change (got %d)" % g.score)
+	g = blank_game()
+	g.cards = [{"id": "phoenix", "n": 0}]
+	g.board.set_cell(Vector2i(0, 1), Board.FOE)
+	g.board.set_cell(Vector2i(1, 2), Board.PAWN)
+	g.round_num = 99
+	g._bot_turn()
+	check(g.board.positions_of(Board.is_player).size() == 1, "Phoenix revives the captured piece")
+	g = blank_game()
+	g.round_num = 3
+	g.boss = "taxman"
+	g.money = 5
+	g.board.set_cell(Vector2i(0, 5), Board.PAWN)
+	g.board.set_cell(Vector2i(5, 0), Board.FOE)
+	g.tap(Vector2i(0, 5))
+	g.tap(Vector2i(1, 4))
+	check(g.money == 4, "Tax Man charges $1 for a quiet move")
+	g = Game.new()
+	g.army = "crowned"
+	g.new_run(1)
+	check(g.board.positions_of(func(v): return v == Board.KING).size() == 1 and g.board.positions_of(Board.is_player).size() == 3, "Crowned Few starts with 1 king + 2 pawns")
+	g = Game.new()
+	g.army = "merchant"
+	g.new_run(1)
+	check(g.money == 12, "Merchant starts with $12")
+
+
 func test_out_of_turns_loses() -> void:
 	print("lose")
 	var g := blank_game()
@@ -307,7 +351,12 @@ func test_random_runs_do_not_crash() -> void:
 	var best := 0
 	for run in 200:
 		var g := Game.new()
+		g.army = Game.ARMIES.keys()[run % Game.ARMIES.size()]
 		g.new_run(run)
+		# Fuzz: random 5-card loadout so every card effect gets exercised.
+		var ids := Cards.ALL.keys()
+		for k in 5:
+			g.cards.append({"id": ids[rng.randi_range(0, ids.size() - 1)], "n": 0})
 		for step in 400:
 			if g.state == "shop":
 				for i in range(g.shop.size() - 1, -1, -1):

@@ -7,6 +7,8 @@ const PATH := "user://profile.json"
 const STARTER := [
 	"heavy", "opener", "pawnpride", "royalblood", "bounty", "golddigger",
 	"longjump", "piggy", "patient", "momentum", "redcarpet", "reinforce",
+	"steady", "edge", "deepstrike", "goldsmith", "firstblood", "pairs",
+	"fortress", "underdog", "court", "greed", "zigzag", "rhythm",
 ]
 
 const UNLOCK_HINTS := {
@@ -20,6 +22,18 @@ const UNLOCK_HINTS := {
 	"laststand": "Clear a round with only 1 piece left",
 	"cleansweep": "Capture 100 enemies in total",
 	"echo": "Reach ante 4",
+	"tyrant": "Have 3 kings at once",
+	"phoenix": "Lose 30 pieces in total",
+	"copycat": "Win a run",
+	"overtime": "Reach ante 6",
+	"midas": "Score 2000 in a single move",
+	"collector": "Capture 250 enemies in total",
+}
+
+const ARMY_HINTS := {
+	"merchant": "Reach ante 3",
+	"crowned": "Crown 5 pawns in total",
+	"militia": "Lose 20 pieces in total",
 }
 
 var data := {}
@@ -34,6 +48,7 @@ func _defaults() -> Dictionary:
 	return {
 		"unlocked": STARTER.duplicate(), "runs": 0, "wins": 0, "best_ante": 0, "best_move": 0,
 		"captures": 0, "crowns": 0, "lost": 0, "sfx": true, "shake": true,
+		"armies": ["classic"], "army": "classic",
 	}
 
 
@@ -45,6 +60,9 @@ func load_profile() -> void:
 	if parsed is Dictionary:
 		for k in parsed:
 			data[k] = parsed[k]
+	for id in STARTER:
+		if not data.unlocked.has(id):
+			data.unlocked.append(id)
 
 
 func save_profile() -> void:
@@ -80,6 +98,24 @@ func _met(id: String, game) -> bool:
 			return data.captures + rs.captures >= 100
 		"echo":
 			return game.ante() >= 4
+		"tyrant":
+			return game.board.positions_of(func(v): return v == 2).size() >= 3
+		"phoenix":
+			return data.lost + rs.lost >= 30
+		"copycat":
+			return data.wins >= 1 or game.state == "won"
+		"overtime":
+			return game.ante() >= 6
+		"midas":
+			return rs.best_move >= 2000
+		"collector":
+			return data.captures + rs.captures >= 250
+		"merchant":
+			return game.ante() >= 3
+		"crowned":
+			return data.crowns + rs.crowns >= 5
+		"militia":
+			return data.lost + rs.lost >= 20
 	return false
 
 
@@ -90,6 +126,10 @@ func check_unlocks(game) -> Array:
 		if not is_unlocked(id) and _met(id, game):
 			data.unlocked.append(id)
 			fresh.append(id)
+	for id in ARMY_HINTS:
+		if not data.armies.has(id) and _met(id, game):
+			data.armies.append(id)
+			fresh.append("army:" + id)
 	if not fresh.is_empty():
 		game.unlocked = data.unlocked.duplicate()
 		save_profile()

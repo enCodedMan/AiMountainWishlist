@@ -25,6 +25,17 @@ const BOSSES := {
 	"wall": {"name": "The Wall", "desc": "3 extra enemies"},
 	"barren": {"name": "Barren", "desc": "No gold or red squares"},
 	"silence": {"name": "Silence", "desc": "Your leftmost card is disabled"},
+	"hollow": {"name": "Hollow", "desc": "Your rightmost card is disabled"},
+	"taxman": {"name": "Tax Man", "desc": "Quiet moves cost $1"},
+	"blunt": {"name": "Blunt", "desc": "Jumps give half the base chips"},
+	"ambush": {"name": "Ambush", "desc": "The bot moves first"},
+}
+## Starting loadouts. Classic is always available; others unlock (see profile.gd).
+const ARMIES := {
+	"classic": {"name": "Classic", "desc": "4 pawns, $4", "pawns": 4, "kings": 0, "money": 4, "turns": 0},
+	"merchant": {"name": "Merchant", "desc": "3 pawns, but start with $12", "pawns": 3, "kings": 0, "money": 12, "turns": 0},
+	"crowned": {"name": "Crowned Few", "desc": "1 king and 2 pawns", "pawns": 2, "kings": 1, "money": 4, "turns": 0},
+	"militia": {"name": "Militia", "desc": "6 pawns, 1 fewer turn per round", "pawns": 6, "kings": 0, "money": 4, "turns": -1},
 }
 
 var rng := RandomNumberGenerator.new()
@@ -43,6 +54,9 @@ var boss := ""  # active (or, in the shop, upcoming) boss rule id
 var endless := false
 ## Cards the shop may offer. Empty means every card (used by tests).
 var unlocked: Array = []
+var army := "classic"
+var lost_this_round := 0
+var chain_last_dir := Vector2i.ZERO
 var run_stats := {}
 var selected := Vector2i(-1, -1)
 var in_chain := false
@@ -75,7 +89,7 @@ func new_run(seed_value: int = -1) -> void:
 	endless = false
 	run_stats = {"max_chain": 0, "captures": 0, "king_captures": 0, "crowns": 0, "lost": 0, "best_move": 0, "lone_clear": false}
 	boss = ""
-	money = 4
+	money = ARMIES[army].money
 	cards = []
 	training_bought = {}
 	levels = {}
@@ -126,7 +140,8 @@ func start_round() -> void:
 		_roll_boss()
 	elif stage() != 2:
 		boss = ""
-	max_turns = BASE_TURNS - (1 if is_boss("short") else 0)
+	max_turns = BASE_TURNS + ARMIES[army].turns - (1 if is_boss("short") else 0)
+	lost_this_round = 0
 	turns_left = max_turns
 	chains_this_round = 0
 	last_gain = 0
@@ -138,14 +153,18 @@ func start_round() -> void:
 	if stage() == 2:
 		message = "Boss: %s. %s" % [BOSSES[boss].name, BOSSES[boss].desc]
 	_trigger("round_start", {})
+	if is_boss("ambush"):
+		_bot_turn()
+		bot_last_move = []
 
 
 func _generate_board() -> Board:
 	var b := Board.new()
 	var home := b.dark_cells_in_rows([Board.SIZE - 2, Board.SIZE - 1])
 	_shuffle(home)
-	for i in mini(BASE_PAWNS, home.size()):
-		b.set_cell(home[i], Board.PAWN)
+	var a: Dictionary = ARMIES[army]
+	for i in mini(a.pawns + a.kings, home.size()):
+		b.set_cell(home[i], Board.KING if i < a.kings else Board.PAWN)
 	var field := b.dark_cells_in_rows([0, 1, 2, 3])
 	_shuffle(field)
 	var foes := mini(4 + ante() + stage() + (3 if is_boss("wall") else 0), field.size() - 3)
@@ -172,6 +191,7 @@ func _reset_chain() -> void:
 	chain_mult = 0
 	chain_xmult = 1.0
 	chain_captured_king = false
+	chain_last_dir = Vector2i.ZERO
 	selected = Vector2i(-1, -1)
 
 
@@ -209,8 +229,10 @@ func _move(from: Vector2i, to: Vector2i) -> void:
 		var mid: Vector2i = (from + to) / 2
 		chain_captured_king = board.get_cell(mid) == Board.FOE_KING
 		board.set_cell(mid, Board.EMPTY)
-		_score_jump(piece, to)
+		_score_jump(piece, to, (to - from) / 2)
 	else:
+		if is_boss("taxman") and money > 0:
+			money -= 1
 		_trigger("step", {})
 	if piece == Board.PAWN and to.y == 0:
 		board.set_cell(to, Board.KING)
@@ -226,13 +248,13 @@ func _move(from: Vector2i, to: Vector2i) -> void:
 	_end_move()
 
 
-func _score_jump(piece: int, landing: Vector2i) -> void:
+func _score_jump(piece: int, landing: Vector2i, dir: Vector2i) -> void:
 	var lv: Dictionary = levels["king" if piece == Board.KING else "pawn"]
 	chain_jumps += 1
 	run_stats.captures += 1
 	if chain_captured_king:
 		run_stats.king_captures += 1
-	chain_chips += JUMP_CHIPS + lv.chips
+	chain_chips += (JUMP_CHIPS / 2 if is_boss("blunt") else JUMP_CHIPS) + lv.chips
 	chain_mult += 1 + lv.mult
 	money += lv.coins
 	var tile := board.get_tile(landing)
@@ -242,7 +264,9 @@ func _score_jump(piece: int, landing: Vector2i) -> void:
 		Board.Tile.RED:
 			chain_mult += RED_MULT
 	board.set_tile(landing, Board.Tile.NONE)
-	_trigger("jump", {"piece": piece, "tile": tile, "king_captured": chain_captured_king})
+	var turned := chain_last_dir != Vector2i.ZERO and chain_last_dir != dir
+	chain_last_dir = dir
+	_trigger("jump", {"piece": piece, "tile": tile, "king_captured": chain_captured_king, "landing": landing, "turned": turned})
 
 
 func _end_move() -> void:
@@ -323,17 +347,31 @@ func _spawn_wave() -> void:
 ## Run every card's effect for this event, left to right. Echo replays its left neighbour.
 func _trigger(event: String, ctx: Dictionary) -> void:
 	for i in cards.size():
-		if i == 0 and is_boss("silence"):
+		if _card_disabled(i):
 			continue
 		if cards[i].id == "echo":
-			if i > 0 and cards[i - 1].id != "echo" and not (i == 1 and is_boss("silence")):
+			if i > 0 and not ["echo", "copycat"].has(cards[i - 1].id) and not _card_disabled(i - 1):
 				var t := _card_effect(cards[i - 1], event, ctx)
 				if t != "":
 					fx.append({"slot": i, "text": "Echo " + t})
 			continue
+		if cards[i].id == "copycat":
+			if i + 1 < cards.size() and not ["echo", "copycat"].has(cards[i + 1].id) and not _card_disabled(i + 1):
+				var t := _card_effect(cards[i + 1], event, ctx)
+				if t != "":
+					fx.append({"slot": i, "text": "Copy " + t})
+			continue
 		var text := _card_effect(cards[i], event, ctx)
 		if text != "":
 			fx.append({"slot": i, "text": text})
+
+
+func _card_disabled(i: int) -> bool:
+	return (i == 0 and is_boss("silence")) or (i == cards.size() - 1 and is_boss("hollow"))
+
+
+func _count(pred: Callable) -> int:
+	return board.positions_of(pred).size()
 
 
 ## Applies one card's effect. Returns a short label if it triggered, else "".
@@ -443,6 +481,82 @@ func _card_effect(card: Dictionary, event: String, ctx: Dictionary) -> String:
 			if not empty.is_empty():
 				board.set_tile(empty[rng.randi_range(0, empty.size() - 1)], Board.Tile.RED)
 				return "+1 red square"
+		["steady", "step"]:
+			money += 1
+			return "+$1"
+		["edge", "jump"]:
+			if ctx.landing.x == 0 or ctx.landing.x == Board.SIZE - 1:
+				chain_chips += 10
+				return "+10 chips"
+		["deepstrike", "jump"]:
+			if ctx.landing.y <= 2:
+				chain_mult += 2
+				return "+2 mult"
+		["goldsmith", "jump"]:
+			if ctx.tile == Board.Tile.GOLD:
+				chain_mult += 3
+				return "+3 mult"
+		["midas", "jump"]:
+			if ctx.tile == Board.Tile.GOLD:
+				chain_xmult *= 1.5
+				return "x1.5 mult"
+		["zigzag", "jump"]:
+			if ctx.turned:
+				chain_chips += 12
+				return "+12 chips"
+		["rhythm", "jump"]:
+			if chain_jumps % 2 == 0:
+				chain_mult += 3
+				return "+3 mult"
+		["firstblood", "chain_end"]:
+			if score == 0 and chain_jumps > 0:
+				chain_chips += 25
+				return "+25 chips"
+		["pairs", "chain_end"]:
+			if chain_jumps == 2:
+				chain_mult += 4
+				return "+4 mult"
+		["collector", "chain_end"]:
+			var m: int = run_stats.captures / 5
+			if m > 0 and chain_jumps > 0:
+				chain_mult += m
+				return "+%d mult" % m
+		["underdog", "chain_end"]:
+			if lost_this_round > 0 and chain_jumps > 0:
+				chain_mult += 3 * lost_this_round
+				return "+%d mult" % (3 * lost_this_round)
+		["court", "chain_end"]:
+			var k := _count(func(v): return v == Board.KING)
+			if k > 0 and chain_jumps > 0:
+				chain_mult += 2 * k
+				return "+%d mult" % (2 * k)
+		["tyrant", "chain_end"]:
+			var k := _count(func(v): return v == Board.KING)
+			if k > 0 and chain_jumps > 0:
+				chain_xmult *= 1.0 + 0.5 * k
+				return "x%s mult" % str(1.0 + 0.5 * k)
+		["fortress", "round_start"]:
+			if _count(Board.is_player) >= 5:
+				turns_left += 1
+				max_turns += 1
+				return "+1 turn"
+		["overtime", "round_start"]:
+			turns_left += 1
+			max_turns += 1
+			return "+1 turn"
+		["phoenix", "round_start"]:
+			card.n = 0
+		["phoenix", "lost_piece"]:
+			if card.n == 0:
+				var spots := board.dark_cells_in_rows([Board.SIZE - 1, Board.SIZE - 2]).filter(func(p): return board.get_cell(p) == Board.EMPTY)
+				if not spots.is_empty():
+					card.n = 1
+					board.set_cell(spots[rng.randi_range(0, spots.size() - 1)], Board.PAWN)
+					return "revived!"
+		["greed", "round_end"]:
+			if turns_left > 0:
+				money += 2 * turns_left
+				return "+$%d" % (2 * turns_left)
 		["piggy", "round_end"]:
 			var gain := mini(money / 5, 5)
 			if gain > 0:
@@ -573,6 +687,7 @@ func _bot_turn() -> void:
 	if not pick.captured.is_empty():
 		message = "The bot took %d of your pieces" % pick.captured.size()
 		run_stats.lost += pick.captured.size()
+		lost_this_round += pick.captured.size()
 		_trigger("lost_piece", {"count": pick.captured.size()})
 
 

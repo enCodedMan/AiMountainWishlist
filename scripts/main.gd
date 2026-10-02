@@ -42,6 +42,10 @@ const TAGS := {
 	"longjump": "CHAIN", "momentum": "CHAIN", "doubleagent": "CHAIN", "laststand": "CHAIN",
 	"cleansweep": "CHAIN", "patient": "QUIET", "martyr": "LOSS", "blast": "CROWN", "kingmaker": "CROWN",
 	"redcarpet": "ROUND", "reinforce": "ROUND", "piggy": "ROUND", "echo": "ECHO",
+	"steady": "QUIET", "edge": "JUMP", "deepstrike": "JUMP", "goldsmith": "JUMP", "firstblood": "CHAIN",
+	"pairs": "CHAIN", "collector": "CHAIN", "fortress": "ROUND", "underdog": "CHAIN", "court": "CHAIN",
+	"greed": "ROUND", "zigzag": "JUMP", "rhythm": "JUMP", "midas": "JUMP", "phoenix": "LOSS",
+	"tyrant": "CHAIN", "overtime": "ROUND", "copycat": "COPY",
 }
 
 var game := Game.new()
@@ -80,6 +84,7 @@ func _ready() -> void:
 
 func _start_run() -> void:
 	game.unlocked = profile.data.unlocked.duplicate()
+	game.army = profile.data.army if Game.ARMIES.has(profile.data.army) else "classic"
 	game.new_run()
 	game.take_events()
 	game.take_fx()
@@ -110,7 +115,10 @@ func _process(delta: float) -> void:
 	var evs := game.take_events()
 	if not evs.is_empty():
 		for id in profile.check_unlocks(game):
-			toasts.append({"text": "New card unlocked: " + Cards.ALL[id].name, "t": 0.0})
+			if id.begins_with("army:"):
+				toasts.append({"text": "New army unlocked: " + Game.ARMIES[id.substr(5)].name, "t": 0.0})
+			else:
+				toasts.append({"text": "New card unlocked: " + Cards.ALL[id].name, "t": 0.0})
 	if (game.state == "lost" or game.state == "won") and not run_recorded and screen == "game":
 		run_recorded = true
 		profile.end_run(game, game.state == "won")
@@ -562,45 +570,59 @@ func _draw_toasts() -> void:
 
 func _draw_title() -> void:
 	# A little checkerboard crest with pieces.
-	var crest := Vector2(W / 2 - 96, 120)
+	var crest := Vector2(W / 2 - 96, 70)
 	for y in 4:
 		for x in 4:
 			draw_rect(Rect2(crest + Vector2(x, y) * 48, Vector2(48, 48)), C_DARK if (x + y) % 2 == 1 else C_LIGHT)
 	_draw_piece(crest + Vector2(1.5, 0.5) * 48, Board.FOE)
 	_draw_piece(crest + Vector2(3.5, 2.5) * 48, Board.FOE)
 	_draw_piece(crest + Vector2(0.5, 3.5) * 48, Board.KING)
-	_text("KINGJUMP", Vector2(0, 380), 56, C_ACCENT, W, HORIZONTAL_ALIGNMENT_CENTER)
-	_text("Chain jumps. Stack cards. Beat the bot.", Vector2(0, 414), 16, C_MUTED, W, HORIZONTAL_ALIGNMENT_CENTER)
-	_button(Rect2(80, 460, W - 160, 56), "Play", func(): _start_run(), true, true)
-	_button(Rect2(80, 528, W - 160, 52), "Collection", func():
+	_text("KINGJUMP", Vector2(0, 336), 56, C_ACCENT, W, HORIZONTAL_ALIGNMENT_CENTER)
+	_text("Chain jumps. Stack cards. Beat the bot.", Vector2(0, 370), 16, C_MUTED, W, HORIZONTAL_ALIGNMENT_CENTER)
+	var d0: Dictionary = profile.data
+	var owned: Array = Game.ARMIES.keys().filter(func(k): return d0.armies.has(k))
+	var cur: String = d0.army if owned.has(d0.army) else "classic"
+	var army_r := Rect2(80, 444, W - 160, 60)
+	_box(army_r, C_PANEL, 12, C_BORDER, 1)
+	_text("ARMY: " + Game.ARMIES[cur].name.to_upper(), army_r.position + Vector2(0, 26), 14, C_ACCENT, army_r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+	_text(Game.ARMIES[cur].desc, army_r.position + Vector2(0, 47), 13, C_MUTED, army_r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+	if owned.size() > 1:
+		var step := func(dirn: int):
+			d0.army = owned[(owned.find(cur) + dirn + owned.size()) % owned.size()]
+			profile.save_profile()
+		_button(Rect2(army_r.position.x + 6, army_r.position.y + 10, 36, 40), "<", func(): step.call(-1))
+		_button(Rect2(army_r.end.x - 42, army_r.position.y + 10, 36, 40), ">", func(): step.call(1))
+	_text("%d/%d armies" % [owned.size(), Game.ARMIES.size()], Vector2(0, 522), 12, C_MUTED, W, HORIZONTAL_ALIGNMENT_CENTER)
+	_button(Rect2(80, 536, W - 160, 56), "Play", func(): _start_run(), true, true)
+	_button(Rect2(80, 604, W - 160, 52), "Collection", func():
 		coll_sel = ""
 		screen = "collection")
 	var d: Dictionary = profile.data
-	_button(Rect2(80, 592, (W - 172) / 2, 48), "Sound: %s" % ("On" if d.sfx else "Off"), func():
+	_button(Rect2(80, 668, (W - 172) / 2, 48), "Sound: %s" % ("On" if d.sfx else "Off"), func():
 		d.sfx = not d.sfx
 		profile.save_profile())
-	_button(Rect2(92 + (W - 172) / 2, 592, (W - 172) / 2, 48), "Shake: %s" % ("On" if d.shake else "Off"), func():
+	_button(Rect2(92 + (W - 172) / 2, 668, (W - 172) / 2, 48), "Shake: %s" % ("On" if d.shake else "Off"), func():
 		d.shake = not d.shake
 		profile.save_profile())
 	_text("Runs %d  ·  Wins %d  ·  Best ante %d  ·  Cards %d/%d" % [d.runs, d.wins, d.best_ante, d.unlocked.size(), Cards.ALL.size()],
-		Vector2(0, 690), 14, C_MUTED, W, HORIZONTAL_ALIGNMENT_CENTER)
+		Vector2(0, 760), 14, C_MUTED, W, HORIZONTAL_ALIGNMENT_CENTER)
 
 
 func _draw_collection() -> void:
 	_text("Collection", Vector2(24, 50), 28, C_ACCENT)
 	_text("%d / %d unlocked" % [profile.data.unlocked.size(), Cards.ALL.size()], Vector2(24, 50), 15, C_MUTED, W - 48, HORIZONTAL_ALIGNMENT_RIGHT)
-	var cw := (W - 48 - 3 * 8) / 4.0
+	var cw := (W - 48 - 4 * 8) / 5.0
 	var ids := Cards.ALL.keys()
 	for i in ids.size():
 		var id: String = ids[i]
-		var r := Rect2(24 + (i % 4) * (cw + 8), 76 + (i / 4) * 104, cw, 96)
+		var r := Rect2(24 + (i % 5) * (cw + 8), 72 + (i / 5) * 80, cw, 74)
 		if profile.is_unlocked(id):
 			_draw_card(r, id, coll_sel == id)
 		else:
 			_box(r, C_PANEL, 10, C_ACCENT if coll_sel == id else C_BORDER, 2 if coll_sel == id else 1)
-			_text("?", r.position + Vector2(0, 58), 30, C_MUTED, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+			_text("?", r.position + Vector2(0, 48), 26, C_MUTED, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 		buttons.append([r, func(): coll_sel = id])
-	var info_r := Rect2(24, 712, W - 48, 64)
+	var info_r := Rect2(24, 718, W - 48, 64)
 	_box(info_r, C_PANEL, 12, C_BORDER, 1)
 	if coll_sel == "":
 		_text("Tap a card to see what it does.", info_r.position + Vector2(0, 38), 14, C_MUTED, info_r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
@@ -611,4 +633,4 @@ func _draw_collection() -> void:
 	else:
 		_text("Locked", info_r.position + Vector2(14, 24), 15, C_MUTED)
 		_text("Unlock: " + Profile.UNLOCK_HINTS.get(coll_sel, ""), info_r.position + Vector2(14, 48), 13, C_TEXT)
-	_button(Rect2(24, 790, W - 48, 52), "Back", func(): screen = "title")
+	_button(Rect2(24, 794, W - 48, 52), "Back", func(): screen = "title")
