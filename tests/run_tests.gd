@@ -3,6 +3,7 @@ extends SceneTree
 
 const Game = preload("res://scripts/game.gd")
 const Board = preload("res://scripts/board.gd")
+const Profile = preload("res://scripts/profile.gd")
 
 var failures := 0
 var ran_random := false
@@ -35,6 +36,7 @@ func _init() -> void:
 	test_cards()
 	test_bot_must_capture_and_chains()
 	test_antes_and_bosses()
+	test_profile_unlocks()
 	test_out_of_turns_loses()
 	test_random_runs_do_not_crash()
 	if not ran_random:
@@ -258,6 +260,32 @@ func test_antes_and_bosses() -> void:
 	var b := g.boss
 	g.next_round()
 	check(g.boss == b and g.stage() == 2, "boss round uses the previewed boss")
+
+
+func test_profile_unlocks() -> void:
+	print("profile")
+	var p := Profile.new()
+	p.path = "user://test_profile.json"
+	var g := blank_game()
+	g.unlocked = p.data.unlocked.duplicate()
+	g.state = "shop"
+	for k in 30:
+		g.roll_shop()
+		for it in g.shop:
+			if it.kind == "card" and not Profile.STARTER.has(it.id):
+				check(false, "shop offered locked card " + it.id)
+				return
+	check(true, "shop only offers unlocked cards")
+	g.run_stats.max_chain = 3
+	var fresh := p.check_unlocks(g)
+	check(fresh.has("hattrick") and g.unlocked.has("hattrick"), "3-jump chain unlocks Hat Trick")
+	p.data.runs = 7
+	p.save_profile()
+	var q := Profile.new()
+	q.path = p.path
+	q.load_profile()
+	check(q.data.runs == 7 and q.is_unlocked("hattrick"), "profile survives save and load")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(p.path))
 
 
 func test_out_of_turns_loses() -> void:

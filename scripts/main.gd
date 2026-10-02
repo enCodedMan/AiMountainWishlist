@@ -5,6 +5,7 @@ const Game = preload("res://scripts/game.gd")
 const Board = preload("res://scripts/board.gd")
 const Cards = preload("res://scripts/cards.gd")
 const Sfx = preload("res://scripts/sfx.gd")
+const Profile = preload("res://scripts/profile.gd")
 
 const W := 480.0
 const H := 860.0
@@ -57,6 +58,11 @@ var anims: Array = []
 var shake := 0.0
 var popups: Array = []  # [{"text", "t", "big"}]
 var jump_streak := 0  # rising pitch within a chain
+var profile := Profile.new()
+var screen := "title"  # title | collection | game
+var run_recorded := false
+var toasts: Array = []  # [{"text", "t"}]
+var coll_sel := ""
 
 const STEP_TIME := 0.13
 const BOT_DELAY := 0.18
@@ -66,8 +72,33 @@ func _ready() -> void:
 	font = ThemeDB.fallback_font
 	sfx = Sfx.new()
 	add_child(sfx)
+	profile.load_profile()
+	game.unlocked = profile.data.unlocked.duplicate()
 	game.new_run()
 	shown_score = game.score
+
+
+func _start_run() -> void:
+	game.unlocked = profile.data.unlocked.duplicate()
+	game.new_run()
+	game.take_events()
+	game.take_fx()
+	anims.clear()
+	popups.clear()
+	shown_score = 0.0
+	sel_card = -1
+	run_recorded = false
+	screen = "game"
+
+
+func _play(id: String, pitch := 1.0) -> void:
+	if profile.data.sfx:
+		sfx.play(id, pitch)
+
+
+func _shake(amount: float) -> void:
+	if profile.data.shake:
+		shake = maxf(shake, amount)
 
 
 ## The state the screen shows: the game may already be in the shop while the last move animates.
@@ -76,7 +107,17 @@ func view_state() -> String:
 
 
 func _process(delta: float) -> void:
-	for e in game.take_events():
+	var evs := game.take_events()
+	if not evs.is_empty():
+		for id in profile.check_unlocks(game):
+			toasts.append({"text": "New card unlocked: " + Cards.ALL[id].name, "t": 0.0})
+	if (game.state == "lost" or game.state == "won") and not run_recorded and screen == "game":
+		run_recorded = true
+		profile.end_run(game, game.state == "won")
+	for t in toasts:
+		t.t += delta
+	toasts = toasts.filter(func(t): return t.t < 3.0)
+	for e in evs:
 		var dur := 0.0
 		if e.type == "move":
 			dur = STEP_TIME * (e.path.size() - 1) + (BOT_DELAY if e.by == "bot" else 0.0)
@@ -88,7 +129,7 @@ func _process(delta: float) -> void:
 		floaters.append({"slot": fx[i].slot, "text": fx[i].text, "t": -0.09 * i})
 	_advance_anims(delta)
 	var busy := absf(shown_score - game.score) > 0.5 or not pulses.is_empty() or not floaters.is_empty() \
-		or not anims.is_empty() or shake > 0.0 or not popups.is_empty()
+		or not anims.is_empty() or shake > 0.0 or not popups.is_empty() or not toasts.is_empty()
 	shown_score = lerpf(shown_score, game.score, minf(delta * 8.0, 1.0))
 	if absf(shown_score - game.score) <= 0.5:
 		shown_score = game.score
@@ -101,7 +142,7 @@ func _process(delta: float) -> void:
 		f.t += delta
 		if was_hidden and f.t >= 0.0:
 			pulses[f.slot] = 0.35
-			sfx.play("tick", 1.0 + 0.08 * f.slot)
+			_play("tick", 1.0 + 0.08 * f.slot)
 	floaters = floaters.filter(func(f): return f.t < 1.1)
 	for p in popups:
 		p.t += delta
@@ -129,27 +170,27 @@ func _on_anim_start(a: Dictionary) -> void:
 	match a.type:
 		"score":
 			popups.append({"text": "+%d" % a.gain, "t": 0.0, "big": a.big})
-			sfx.play("score", 1.0 + minf(a.gain / 2000.0, 0.6))
-			shake = 10.0 if a.big else 3.0
+			_play("score", 1.0 + minf(a.gain / 2000.0, 0.6))
+			_shake(10.0 if a.big else 3.0)
 			jump_streak = 0
 		"win":
-			sfx.play("win")
+			_play("win")
 		"lost":
-			sfx.play("lose")
-			shake = 8.0
+			_play("lose")
+			_shake(8.0)
 
 
 func _on_anim_end(a: Dictionary) -> void:
 	if a.type != "move":
 		return
 	if a.captured.is_empty():
-		sfx.play("step")
+		_play("step")
 	elif a.by == "bot":
-		sfx.play("hit")
-		shake = 6.0
+		_play("hit")
+		_shake(6.0)
 	else:
 		jump_streak += 1
-		sfx.play("jump", 1.0 + 0.12 * (jump_streak - 1))
+		_play("jump", 1.0 + 0.12 * (jump_streak - 1))
 
 
 ## Where a moving piece is drawn right now, or null if the move has finished.
@@ -175,14 +216,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	for i in range(buttons.size() - 1, -1, -1):
 		if buttons[i][0].has_point(pos):
 			buttons[i][1].call()
-			sfx.play("select")
+			_play("select")
 			queue_redraw()
 			return
 	if game.state == "play":
 		var cell := Vector2i(((pos - ORIGIN) / CELL).floor())
 		if game.tap(cell):
 			if game.board.in_bounds(cell) and Board.is_player(game.board.get_cell(cell)):
-				sfx.play("select")
+				_play("select")
 			queue_redraw()
 
 
@@ -233,10 +274,19 @@ func _draw() -> void:
 		floaters.clear()
 		pulses.clear()
 	draw_rect(Rect2(0, 0, W, H), C_BG)
+	if screen == "title":
+		_draw_title()
+		_draw_toasts()
+		return
+	if screen == "collection":
+		_draw_collection()
+		return
 	if shake > 0.0:
 		draw_set_transform(Vector2(randf_range(-shake, shake), randf_range(-shake, shake)) * 0.5)
 	if st == "shop":
 		_draw_shop()
+		draw_set_transform(Vector2.ZERO)
+		_draw_toasts()
 		return
 	_draw_top_bar()
 	_draw_score_panel()
@@ -250,10 +300,11 @@ func _draw() -> void:
 		_draw_lost()
 	elif st == "won":
 		_draw_won()
+	_draw_toasts()
 
 
 func _draw_top_bar() -> void:
-	_text("KINGJUMP", Vector2(24, 46), 24, C_ACCENT)
+	_button(Rect2(24, 22, 72, 32), "Menu", func(): _to_title())
 	var stage_col := C_MULT if game.stage() == 2 else C_TEXT
 	_pill(Rect2(W - 272, 22, 140, 32), "Ante %d · %s" % [game.ante(), Game.STAGE_NAMES[game.stage()]], stage_col)
 	_pill(Rect2(W - 124, 22, 100, 32), "$%d" % game.money, C_ACCENT)
@@ -476,10 +527,8 @@ func _draw_lost() -> void:
 	_text("Run over", r.position + Vector2(0, 56), 30, C_TEXT, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	_text(game.message, r.position + Vector2(0, 92), 15, C_MUTED, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	_text("You reached round %d" % game.round_num, r.position + Vector2(0, 118), 15, C_MUTED, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
-	_button(Rect2(r.position.x + 40, r.end.y - 72, r.size.x - 80, 52), "New run", func():
-		sel_card = -1
-		game.new_run()
-		shown_score = 0.0, true, true)
+	_button(Rect2(r.position.x + 40, r.end.y - 72, r.size.x / 2 - 46, 52), "Menu", func(): _to_title())
+	_button(Rect2(r.position.x + r.size.x / 2 + 6, r.end.y - 72, r.size.x / 2 - 46, 52), "New run", func(): _start_run(), true, true)
 
 
 func _draw_won() -> void:
@@ -489,7 +538,77 @@ func _draw_won() -> void:
 	_text("Victory!", r.position + Vector2(0, 60), 34, C_ACCENT, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	_text(game.message, r.position + Vector2(0, 96), 15, C_MUTED, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	_button(Rect2(r.position.x + 40, r.end.y - 136, r.size.x - 80, 52), "Keep going (endless)", func(): game.continue_endless(), true, true)
-	_button(Rect2(r.position.x + 40, r.end.y - 72, r.size.x - 80, 52), "New run", func():
-		sel_card = -1
-		game.new_run()
-		shown_score = 0.0)
+	_button(Rect2(r.position.x + 40, r.end.y - 72, r.size.x / 2 - 46, 52), "Menu", func(): _to_title())
+	_button(Rect2(r.position.x + r.size.x / 2 + 6, r.end.y - 72, r.size.x / 2 - 46, 52), "New run", func(): _start_run())
+
+
+# --- Menus -----------------------------------------------------------------------
+
+func _to_title() -> void:
+	if not run_recorded and game.state != "lost" and game.state != "won" and game.round_num > 1:
+		profile.end_run(game, false)
+	run_recorded = true
+	screen = "title"
+
+
+func _draw_toasts() -> void:
+	for i in toasts.size():
+		var t: Dictionary = toasts[i]
+		var a := clampf(minf(t.t / 0.2, (3.0 - t.t) / 0.4), 0.0, 1.0)
+		var r := Rect2(40, 64 + i * 52 - (1.0 - a) * 12, W - 80, 44)
+		_box(r, Color(C_PANEL_HI, a), 12, Color(C_ACCENT, a), 2)
+		_text(t.text, r.position + Vector2(0, 28), 15, Color(C_ACCENT, a), r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+
+
+func _draw_title() -> void:
+	# A little checkerboard crest with pieces.
+	var crest := Vector2(W / 2 - 96, 120)
+	for y in 4:
+		for x in 4:
+			draw_rect(Rect2(crest + Vector2(x, y) * 48, Vector2(48, 48)), C_DARK if (x + y) % 2 == 1 else C_LIGHT)
+	_draw_piece(crest + Vector2(1.5, 0.5) * 48, Board.FOE)
+	_draw_piece(crest + Vector2(3.5, 2.5) * 48, Board.FOE)
+	_draw_piece(crest + Vector2(0.5, 3.5) * 48, Board.KING)
+	_text("KINGJUMP", Vector2(0, 380), 56, C_ACCENT, W, HORIZONTAL_ALIGNMENT_CENTER)
+	_text("Chain jumps. Stack cards. Beat the bot.", Vector2(0, 414), 16, C_MUTED, W, HORIZONTAL_ALIGNMENT_CENTER)
+	_button(Rect2(80, 460, W - 160, 56), "Play", func(): _start_run(), true, true)
+	_button(Rect2(80, 528, W - 160, 52), "Collection", func():
+		coll_sel = ""
+		screen = "collection")
+	var d: Dictionary = profile.data
+	_button(Rect2(80, 592, (W - 172) / 2, 48), "Sound: %s" % ("On" if d.sfx else "Off"), func():
+		d.sfx = not d.sfx
+		profile.save_profile())
+	_button(Rect2(92 + (W - 172) / 2, 592, (W - 172) / 2, 48), "Shake: %s" % ("On" if d.shake else "Off"), func():
+		d.shake = not d.shake
+		profile.save_profile())
+	_text("Runs %d  ·  Wins %d  ·  Best ante %d  ·  Cards %d/%d" % [d.runs, d.wins, d.best_ante, d.unlocked.size(), Cards.ALL.size()],
+		Vector2(0, 690), 14, C_MUTED, W, HORIZONTAL_ALIGNMENT_CENTER)
+
+
+func _draw_collection() -> void:
+	_text("Collection", Vector2(24, 50), 28, C_ACCENT)
+	_text("%d / %d unlocked" % [profile.data.unlocked.size(), Cards.ALL.size()], Vector2(24, 50), 15, C_MUTED, W - 48, HORIZONTAL_ALIGNMENT_RIGHT)
+	var cw := (W - 48 - 3 * 8) / 4.0
+	var ids := Cards.ALL.keys()
+	for i in ids.size():
+		var id: String = ids[i]
+		var r := Rect2(24 + (i % 4) * (cw + 8), 76 + (i / 4) * 104, cw, 96)
+		if profile.is_unlocked(id):
+			_draw_card(r, id, coll_sel == id)
+		else:
+			_box(r, C_PANEL, 10, C_ACCENT if coll_sel == id else C_BORDER, 2 if coll_sel == id else 1)
+			_text("?", r.position + Vector2(0, 58), 30, C_MUTED, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+		buttons.append([r, func(): coll_sel = id])
+	var info_r := Rect2(24, 712, W - 48, 64)
+	_box(info_r, C_PANEL, 12, C_BORDER, 1)
+	if coll_sel == "":
+		_text("Tap a card to see what it does.", info_r.position + Vector2(0, 38), 14, C_MUTED, info_r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
+	elif profile.is_unlocked(coll_sel):
+		var info: Dictionary = Cards.ALL[coll_sel]
+		_text("%s  ·  %s" % [info.name, RARITY_NAMES[info.rarity]], info_r.position + Vector2(14, 24), 15, RARITY_COLORS[info.rarity])
+		_text(info.desc, info_r.position + Vector2(14, 48), 13, C_TEXT)
+	else:
+		_text("Locked", info_r.position + Vector2(14, 24), 15, C_MUTED)
+		_text("Unlock: " + Profile.UNLOCK_HINTS.get(coll_sel, ""), info_r.position + Vector2(14, 48), 13, C_TEXT)
+	_button(Rect2(24, 790, W - 48, 52), "Back", func(): screen = "title")

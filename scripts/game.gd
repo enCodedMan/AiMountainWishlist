@@ -41,6 +41,9 @@ var training_bought := {}
 var state := "play"  # play | shop | lost | won
 var boss := ""  # active (or, in the shop, upcoming) boss rule id
 var endless := false
+## Cards the shop may offer. Empty means every card (used by tests).
+var unlocked: Array = []
+var run_stats := {}
 var selected := Vector2i(-1, -1)
 var in_chain := false
 var chain_jumps := 0
@@ -70,6 +73,7 @@ func new_run(seed_value: int = -1) -> void:
 		rng.randomize()
 	round_num = 1
 	endless = false
+	run_stats = {"max_chain": 0, "captures": 0, "king_captures": 0, "crowns": 0, "lost": 0, "best_move": 0, "lone_clear": false}
 	boss = ""
 	money = 4
 	cards = []
@@ -210,6 +214,7 @@ func _move(from: Vector2i, to: Vector2i) -> void:
 		_trigger("step", {})
 	if piece == Board.PAWN and to.y == 0:
 		board.set_cell(to, Board.KING)
+		run_stats.crowns += 1
 		_trigger("promote", {"pos": to})
 		_end_move()
 		return
@@ -224,6 +229,9 @@ func _move(from: Vector2i, to: Vector2i) -> void:
 func _score_jump(piece: int, landing: Vector2i) -> void:
 	var lv: Dictionary = levels["king" if piece == Board.KING else "pawn"]
 	chain_jumps += 1
+	run_stats.captures += 1
+	if chain_captured_king:
+		run_stats.king_captures += 1
 	chain_chips += JUMP_CHIPS + lv.chips
 	chain_mult += 1 + lv.mult
 	money += lv.coins
@@ -245,6 +253,8 @@ func _end_move() -> void:
 		last_mult = maxi(int(round(maxi(chain_mult, 1) * chain_xmult)), 1)
 		last_gain = last_chips * last_mult
 		score += last_gain
+		run_stats.best_move = maxi(run_stats.best_move, last_gain)
+		run_stats.max_chain = maxi(run_stats.max_chain, chain_jumps)
 		events.append({"type": "score", "gain": last_gain, "big": last_gain * 2 >= target})
 		if chain_jumps >= 2:
 			chains_this_round += 1
@@ -276,6 +286,8 @@ func _end_move() -> void:
 
 func _win_round() -> void:
 	events.append({"type": "win"})
+	if board.positions_of(Board.is_player).size() == 1:
+		run_stats.lone_clear = true
 	_trigger("round_end", {})
 	var earned: int = STAGE_REWARD[stage()] + turns_left
 	money += earned
@@ -560,6 +572,7 @@ func _bot_turn() -> void:
 	bot_last_move = [pick.from] + pick.path
 	if not pick.captured.is_empty():
 		message = "The bot took %d of your pieces" % pick.captured.size()
+		run_stats.lost += pick.captured.size()
 		_trigger("lost_piece", {"count": pick.captured.size()})
 
 
@@ -570,13 +583,17 @@ func _random_card_id(exclude: Array) -> String:
 	var rarity := 0 if roll <= RARITY_WEIGHTS[0] else (1 if roll <= RARITY_WEIGHTS[0] + RARITY_WEIGHTS[1] else 2)
 	var pool: Array = []
 	for id in Cards.ALL:
-		if not has(id) and not exclude.has(id) and Cards.ALL[id].rarity == rarity:
+		if not has(id) and not exclude.has(id) and Cards.ALL[id].rarity == rarity and _offerable(id):
 			pool.append(id)
 	if pool.is_empty():
 		for id in Cards.ALL:
-			if not has(id) and not exclude.has(id):
+			if not has(id) and not exclude.has(id) and _offerable(id):
 				pool.append(id)
 	return "" if pool.is_empty() else pool[rng.randi_range(0, pool.size() - 1)]
+
+
+func _offerable(id: String) -> bool:
+	return unlocked.is_empty() or unlocked.has(id)
 
 
 func roll_shop() -> void:
