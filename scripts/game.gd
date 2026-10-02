@@ -6,6 +6,8 @@ const Cards = preload("res://scripts/cards.gd")
 
 const BASE_TURNS := 5
 const BASE_PAWNS := 4
+const FOES_BASE := 5
+const WAVE_BELOW := 3
 const JUMP_CHIPS := 10
 const GOLD_CHIPS := 30
 const RED_MULT := 2
@@ -14,8 +16,8 @@ const SHOP_CARDS := 3
 const SHOP_TRAINING := 2
 const RARITY_WEIGHTS := [70, 25, 5]
 const WIN_ANTE := 8
-const ANTE_BASE := [100, 200, 350, 600, 1000, 1600, 2500, 4000]
-const STAGE_SCALE := [1.0, 1.5, 2.0]
+const ANTE_BASE := [60, 110, 180, 280, 400, 560, 760, 1000]
+const STAGE_SCALE := [1.0, 1.4, 1.8]
 const STAGE_NAMES := ["Small", "Big", "Boss"]
 const STAGE_REWARD := [3, 4, 5]
 const BOSSES := {
@@ -33,9 +35,9 @@ const BOSSES := {
 ## Starting loadouts. Classic is always available; others unlock (see profile.gd).
 const ARMIES := {
 	"classic": {"name": "Classic", "desc": "4 pawns, $4", "pawns": 4, "kings": 0, "money": 4, "turns": 0},
-	"merchant": {"name": "Merchant", "desc": "3 pawns, but start with $12", "pawns": 3, "kings": 0, "money": 12, "turns": 0},
-	"crowned": {"name": "Crowned Few", "desc": "1 king and 2 pawns", "pawns": 2, "kings": 1, "money": 4, "turns": 0},
-	"militia": {"name": "Militia", "desc": "6 pawns, 1 fewer turn per round", "pawns": 6, "kings": 0, "money": 4, "turns": -1},
+	"merchant": {"name": "Merchant", "desc": "Start with $14, but rounds pay $1 less", "pawns": 4, "kings": 0, "money": 14, "turns": 0, "reward": -1},
+	"crowned": {"name": "Crowned Few", "desc": "1 king and 3 pawns, but start with $0", "pawns": 3, "kings": 1, "money": 0, "turns": 0},
+	"militia": {"name": "Militia", "desc": "5 pawns, 1 fewer turn per round", "pawns": 5, "kings": 0, "money": 4, "turns": -1},
 }
 
 var rng := RandomNumberGenerator.new()
@@ -165,14 +167,22 @@ func _generate_board() -> Board:
 	var a: Dictionary = ARMIES[army]
 	for i in mini(a.pawns + a.kings, home.size()):
 		b.set_cell(home[i], Board.KING if i < a.kings else Board.PAWN)
-	var field := b.dark_cells_in_rows([0, 1, 2, 3])
-	_shuffle(field)
-	var foes := mini(4 + ante() + stage() + (3 if is_boss("wall") else 0), field.size() - 3)
+	# Enemies fill rows 3 and 1 first, leaving rows 2 and 0 open as landing
+	# squares, so double jumps exist from turn one. Extra enemies (later antes)
+	# start plugging the gaps, which makes chains harder to find.
+	var lanes := b.dark_cells_in_rows([1, 3])
+	var gaps := b.dark_cells_in_rows([0, 2])
+	_shuffle(lanes)
+	_shuffle(gaps)
+	var field := lanes + gaps
+	var foes := mini(FOES_BASE + ante() / 2 + stage() + (3 if is_boss("wall") else 0), field.size() - 3)
 	for i in foes:
 		b.set_cell(field[i], Board.FOE_KING if is_boss("crowned") else Board.FOE)
+	var empty := field.slice(foes)
+	_shuffle(empty)
 	var bonus := [] if is_boss("barren") else [Board.Tile.GOLD, Board.Tile.GOLD, Board.Tile.RED]
-	for i in bonus.size():
-		b.set_tile(field[foes + i], bonus[i])
+	for i in mini(bonus.size(), empty.size()):
+		b.set_tile(empty[i], bonus[i])
 	return b
 
 
@@ -290,7 +300,7 @@ func _end_move() -> void:
 	if score >= target:
 		_win_round()
 		return
-	if board.positions_of(Board.is_foe).is_empty():
+	if board.positions_of(Board.is_foe).size() < WAVE_BELOW:
 		_spawn_wave()
 	if turns_left <= 0:
 		state = "lost"
@@ -313,7 +323,7 @@ func _win_round() -> void:
 	if board.positions_of(Board.is_player).size() == 1:
 		run_stats.lone_clear = true
 	_trigger("round_end", {})
-	var earned: int = STAGE_REWARD[stage()] + turns_left
+	var earned: int = STAGE_REWARD[stage()] + turns_left + int(ARMIES[army].get("reward", 0))
 	money += earned
 	message = "Round cleared! +$%d" % earned
 	boss = ""

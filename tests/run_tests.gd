@@ -128,7 +128,7 @@ func test_shop_buy_and_next_round() -> void:
 	check(g.sell(0) and g.money == before + 2 and g.cards.size() == 4, "selling refunds half price")
 	g.next_round()
 	check(g.round_num == 2 and g.state == "play", "round 2 starts")
-	check(g.target == 150, "round 2 target is 150 (got %d)" % g.target)
+	check(g.target == Game.target_for(2) and g.target > Game.target_for(1), "round 2 target is higher (got %d)" % g.target)
 
 
 func test_training_stacks_and_costs_more() -> void:
@@ -224,8 +224,8 @@ func test_bot_must_capture_and_chains() -> void:
 
 func test_antes_and_bosses() -> void:
 	print("antes and bosses")
-	check(Game.target_for(1) == 100 and Game.target_for(3) == 200 and Game.target_for(4) == 200, "ante targets: 100, boss 200, ante 2 small 200")
-	check(Game.target_for(24) == 8000, "ante 8 boss is 8000 (got %d)" % Game.target_for(24))
+	check(Game.target_for(1) == Game.ANTE_BASE[0] and Game.target_for(3) > Game.target_for(2) and Game.target_for(4) == Game.ANTE_BASE[1], "ante targets follow ANTE_BASE x stage scale")
+	check(Game.target_for(24) == int(round(Game.ANTE_BASE[7] * Game.STAGE_SCALE[2] / 10.0)) * 10, "ante 8 boss target (got %d)" % Game.target_for(24))
 	check(Game.target_for(25) > Game.target_for(24) / 2, "endless keeps growing")
 	var g := Game.new()
 	g.new_run(3)
@@ -325,11 +325,11 @@ func test_new_cards_and_armies() -> void:
 	g = Game.new()
 	g.army = "crowned"
 	g.new_run(1)
-	check(g.board.positions_of(func(v): return v == Board.KING).size() == 1 and g.board.positions_of(Board.is_player).size() == 3, "Crowned Few starts with 1 king + 2 pawns")
+	check(g.board.positions_of(func(v): return v == Board.KING).size() == 1 and g.board.positions_of(Board.is_player).size() == 4, "Crowned Few starts with 1 king + 3 pawns")
 	g = Game.new()
 	g.army = "merchant"
 	g.new_run(1)
-	check(g.money == 12, "Merchant starts with $12")
+	check(g.money == 14, "Merchant starts with $14")
 
 
 func test_out_of_turns_loses() -> void:

@@ -14,8 +14,10 @@ After your move the **bot** plays one real checkers move: captures are mandatory
 
 **Shop:** 3 cards (rarity-weighted) and 2 **training** upgrades (stacking pawn or king bonuses: +chips, +mult or +$ per jump; each repeat costs $2 more).
 
-## Tests
-`godot --headless --path . -s tests/run_tests.gd`
+## Tests and balance
+`godot --headless --path . -s tests/run_tests.gd` runs the logic tests.
+
+`godot --headless --path . -s tests/sim.gd` plays hundreds of full runs with a greedy bot and prints win rate and how far runs get per army (set `SIM_RUNS` / `SIM_ARMY` to change).
 
 ## Layout
 - `scripts/board.gd`: board and move rules
