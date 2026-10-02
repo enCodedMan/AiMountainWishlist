@@ -4,6 +4,7 @@ extends Node2D
 const Game = preload("res://scripts/game.gd")
 const Board = preload("res://scripts/board.gd")
 const Relics = preload("res://scripts/relics.gd")
+const Content = preload("res://scripts/content.gd")
 
 const CELL := 72.0
 const ORIGIN := Vector2(24, 190)
@@ -19,6 +20,8 @@ const C_RED := Color("e74c3c")
 const C_HILITE := Color(0.3, 0.9, 0.5, 0.55)
 const C_TEXT := Color("f4f1ea")
 const C_BTN := Color("3d3a5c")
+const C_CARD := Color("2e6b8a")
+const C_BOT := Color(1.0, 0.4, 0.3, 0.35)
 
 var game := Game.new()
 var font: Font
@@ -93,6 +96,8 @@ func _draw_board() -> void:
 					draw_rect(r.grow(-6), C_GOLD, false, 4)
 				Board.Tile.RED:
 					draw_rect(r.grow(-6), C_RED, false, 4)
+			if game.bot_last_move.has(p):
+				draw_rect(r, C_BOT)
 			if p == game.selected:
 				draw_rect(r, C_HILITE)
 			if targets.has(p):
@@ -108,30 +113,52 @@ func _draw_board() -> void:
 
 
 func _draw_relics() -> void:
-	var y := ORIGIN.y + CELL * Board.SIZE + 36
-	_text("Relics", Vector2(24, y), 20, C_GOLD)
+	var y := ORIGIN.y + CELL * Board.SIZE + 16
+	# Hand of booster cards: tap to use.
+	_text("Cards (tap to use)%s" % ("  x2 mult ready!" if game.double_next else ""), Vector2(24, y + 16), 18, C_GOLD)
+	var cw := (W - 48 - 16) / Content.HAND_SIZE
+	for i in Content.HAND_SIZE:
+		var r := Rect2(24 + i * (cw + 8), y + 26, cw, 64)
+		if i < game.hand.size():
+			var c: Dictionary = Content.CARDS[game.hand[i]]
+			draw_rect(r, C_CARD)
+			_text(c.name, r.position + Vector2(0, 22), 16, C_TEXT, cw, HORIZONTAL_ALIGNMENT_CENTER)
+			draw_multiline_string(font, r.position + Vector2(4, 44), c.desc, HORIZONTAL_ALIGNMENT_CENTER, cw - 8, 11, 2)
+			if game.state == "play":
+				var idx := i
+				buttons.append([r, func(): game.use_card(idx)])
+		else:
+			draw_rect(r, C_CARD.darkened(0.6), false, 2)
+	y += 112
+	var pl: Dictionary = game.levels.pawn
+	var kl: Dictionary = game.levels.king
+	_text("Pawn +%d chips +%d mult +$%d   King +%d chips +%d mult +$%d" % [pl.chips, pl.mult, pl.coins, kl.chips, kl.mult, kl.coins], Vector2(24, y), 14)
+	y += 26
+	_text("Relics", Vector2(24, y), 18, C_GOLD)
 	if game.relics.is_empty():
-		_text("none yet: clear a round to shop", Vector2(24, y + 28), 16)
+		_text("none yet: clear a round to shop", Vector2(24, y + 22), 14)
 	for i in game.relics.size():
-		var r: Dictionary = Relics.ALL[game.relics[i]]
-		_text("%s: %s" % [r.name, r.desc], Vector2(24, y + 28 + i * 24), 16)
+		var rl: Dictionary = Relics.ALL[game.relics[i]]
+		_text("%s: %s" % [rl.name, rl.desc], Vector2(24, y + 22 + i * 20), 14)
 
 
 func _draw_shop() -> void:
-	var panel := Rect2(16, 170, W - 32, 520)
-	draw_rect(panel, Color(0, 0, 0, 0.85))
-	_text("SHOP", Vector2(32, 210), 28, C_GOLD)
-	_text("$%d" % game.money, Vector2(W - 140, 210), 24, C_GOLD, 100, HORIZONTAL_ALIGNMENT_RIGHT)
-	_text(game.message, Vector2(32, 240), 18)
-	for i in game.shop_offer.size():
-		var id: String = game.shop_offer[i]
-		var r: Dictionary = Relics.ALL[id]
-		var y := 270.0 + i * 110
-		_text("%s ($%d)" % [r.name, r.cost], Vector2(32, y + 22), 20)
-		_text(r.desc, Vector2(32, y + 48), 16, C_TEXT, W - 200)
-		_button(Rect2(W - 140, y, 100, 44), "Buy", func(): game.buy(id), game.money >= r.cost)
-	_button(Rect2(32, 620, 190, 52), "Reroll ($%d)" % Game.REROLL_COST, func(): game.reroll(), game.money >= Game.REROLL_COST)
-	_button(Rect2(W - 222, 620, 190, 52), "Next round", func(): game.next_round())
+	draw_rect(Rect2(8, 8, W - 16, 844), C_BG)
+	_text("SHOP", Vector2(28, 52), 30, C_GOLD)
+	_text("$%d" % game.money, Vector2(W - 140, 52), 26, C_GOLD, 112, HORIZONTAL_ALIGNMENT_RIGHT)
+	_text(game.message, Vector2(28, 84), 18)
+	var kinds := {"relic": "RELIC", "card": "CARD", "train": "TRAINING"}
+	for i in game.shop.size():
+		var item: Dictionary = game.shop[i]
+		var info: Dictionary = game.item_info(item)
+		var y := 104.0 + i * 92
+		_text(kinds[item.kind], Vector2(28, y + 18), 12, C_GOLD)
+		_text("%s ($%d)" % [info.name, game.item_cost(item)], Vector2(28, y + 40), 19)
+		_text(info.desc, Vector2(28, y + 62), 14, C_TEXT, W - 180)
+		var idx := i
+		_button(Rect2(W - 130, y + 16, 100, 44), "Buy", func(): game.buy(idx), game.can_buy(i))
+	_button(Rect2(28, 776, 190, 52), "Reroll ($%d)" % Game.REROLL_COST, func(): game.reroll(), game.money >= Game.REROLL_COST)
+	_button(Rect2(W - 218, 776, 190, 52), "Next round", func(): game.next_round())
 
 
 func _draw_lost() -> void:

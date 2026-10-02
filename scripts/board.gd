@@ -19,6 +19,14 @@ func _init() -> void:
 			tiles[y].append(Tile.NONE)
 
 
+func copy():
+	var b = get_script().new()
+	for y in SIZE:
+		b.cells[y] = cells[y].duplicate()
+		b.tiles[y] = tiles[y].duplicate()
+	return b
+
+
 static func is_player(v: int) -> bool:
 	return v == PAWN or v == KING
 

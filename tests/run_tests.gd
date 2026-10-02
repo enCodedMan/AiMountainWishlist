@@ -5,6 +5,7 @@ const Game = preload("res://scripts/game.gd")
 const Board = preload("res://scripts/board.gd")
 
 var failures := 0
+var ran_random := false
 
 
 func check(cond: bool, label: String) -> void:
@@ -30,8 +31,14 @@ func _init() -> void:
 	test_hat_trick_doubles_mult()
 	test_round_win_opens_shop()
 	test_shop_buy_and_next_round()
+	test_training_stacks_and_costs_more()
+	test_cards()
+	test_bot_must_capture_and_chains()
 	test_out_of_turns_loses()
 	test_random_runs_do_not_crash()
+	if not ran_random:
+		failures += 1
+		print("  FAIL random play did not finish (script error?)")
 	print("FAILURES: ", failures)
 	quit(1 if failures > 0 else 0)
 
@@ -92,7 +99,7 @@ func test_round_win_opens_shop() -> void:
 	g.tap(Vector2i(3, 3))
 	check(g.state == "shop", "state is shop")
 	check(g.money == 3 + g.turns_left, "earned $3 + turns left (got %d)" % g.money)
-	check(g.shop_offer.size() == 3, "3 relics offered")
+	check(g.shop.size() == 7, "shop stocked")
 
 
 func test_shop_buy_and_next_round() -> void:
@@ -101,14 +108,71 @@ func test_shop_buy_and_next_round() -> void:
 	g.state = "shop"
 	g.money = 100
 	g.roll_shop()
-	var id: String = g.shop_offer[0]
-	check(g.buy(id), "buy succeeds")
-	check(g.has(id) and not g.shop_offer.has(id), "relic owned and removed from shop")
+	check(g.shop.size() == 7, "shop has 3 relics, 2 cards, 2 training (got %d)" % g.shop.size())
+	var id: String = g.shop[0].id
+	check(g.buy(0), "buy relic succeeds")
+	check(g.has(id), "relic owned")
 	check(g.reroll(), "reroll succeeds")
-	check(not g.shop_offer.has(id), "owned relic not re-offered")
+	check(not g.shop.any(func(it): return it.kind == "relic" and it.id == id), "owned relic not re-offered")
 	g.next_round()
 	check(g.round_num == 2 and g.state == "play", "round 2 starts")
 	check(g.target == 150, "round 2 target is 150 (got %d)" % g.target)
+
+
+func test_training_stacks_and_costs_more() -> void:
+	print("training")
+	var g := blank_game()
+	g.state = "shop"
+	g.money = 100
+	g.shop = [{"kind": "train", "id": "pawn_mult"}, {"kind": "train", "id": "pawn_mult"}]
+	check(g.item_cost(g.shop[0]) == 4, "first Pawn Fervor costs $4")
+	g.buy(0)
+	check(g.item_cost(g.shop[0]) == 6, "second costs $6")
+	g.buy(0)
+	check(g.levels.pawn.mult == 2, "pawn mult level 2")
+	g.state = "play"
+	g.board = Board.new()
+	g.board.set_cell(Vector2i(1, 5), Board.PAWN)
+	g.board.set_cell(Vector2i(2, 4), Board.FOE)
+	g.board.set_cell(Vector2i(5, 0), Board.FOE)
+	g.tap(Vector2i(1, 5))
+	g.tap(Vector2i(3, 3))
+	check(g.score == 10 * 3, "pawn jump scores 10 chips x 3 mult (got %d)" % g.score)
+
+
+func test_cards() -> void:
+	print("cards")
+	var g := blank_game()
+	g.hand = ["double", "overtime", "coronation"]
+	var turns := g.turns_left
+	check(g.use_card(1) and g.turns_left == turns + 1, "Overtime adds a turn")
+	g.board.set_cell(Vector2i(1, 5), Board.PAWN)
+	check(not g.use_card(1), "Coronation needs a selected pawn")
+	g.tap(Vector2i(1, 5))
+	check(g.use_card(1) and g.board.get_cell(Vector2i(1, 5)) == Board.KING, "Coronation crowns the pawn")
+	check(g.use_card(0) and g.double_next, "Double Down armed")
+	g.board.set_cell(Vector2i(2, 4), Board.FOE)
+	g.board.set_cell(Vector2i(5, 0), Board.FOE)
+	g.tap(Vector2i(1, 5))
+	g.tap(Vector2i(3, 3))
+	check(g.score == 10 * 2, "Double Down doubles mult (got %d)" % g.score)
+	check(g.hand.is_empty(), "used cards leave the hand")
+
+
+func test_bot_must_capture_and_chains() -> void:
+	print("bot")
+	var g := blank_game()
+	g.board.set_cell(Vector2i(0, 1), Board.FOE)
+	g.board.set_cell(Vector2i(1, 2), Board.PAWN)
+	g.board.set_cell(Vector2i(3, 4), Board.PAWN)
+	g.board.set_cell(Vector2i(5, 0), Board.FOE)
+	var moves := g.bot_moves(g.board)
+	check(moves.size() == 1, "capture is mandatory: only 1 legal move (got %d)" % moves.size())
+	check(moves[0].captured.size() == 2 and moves[0].path.back() == Vector2i(4, 5), "bot double-jumps to (4,5)")
+	g.round_num = 99  # no blunders
+	g._bot_turn()
+	check(g.board.get_cell(Vector2i(4, 5)) == Board.FOE_KING, "bot piece crowned on your back row")
+	check(g.board.positions_of(Board.is_player).is_empty(), "both pawns taken")
 
 
 func test_out_of_turns_loses() -> void:
@@ -133,13 +197,17 @@ func test_random_runs_do_not_crash() -> void:
 		g.new_run(run)
 		for step in 400:
 			if g.state == "shop":
-				if not g.shop_offer.is_empty():
-					g.buy(g.shop_offer[0])
+				for i in range(g.shop.size() - 1, -1, -1):
+					g.buy(i)
 				g.next_round()
 				continue
 			if g.state == "lost":
 				break
 			var moves: Array = []
+			if not g.in_chain and not g.hand.is_empty() and rng.randf() < 0.2:
+				var mine := g.board.positions_of(Board.is_player)
+				g.tap(mine[rng.randi_range(0, mine.size() - 1)])
+				g.use_card(rng.randi_range(0, g.hand.size() - 1))
 			for p in g.board.positions_of(Board.is_player):
 				if g.in_chain and p != g.selected:
 					continue
@@ -155,5 +223,6 @@ func test_random_runs_do_not_crash() -> void:
 				g.tap(pick[0])
 			g.tap(pick[1])
 		best = maxi(best, g.round_num)
+	ran_random = true
 	print("  best round reached by random greedy play: ", best)
 	check(best >= 2, "random greedy play can clear round 1")
