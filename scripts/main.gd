@@ -4,6 +4,7 @@ extends Node2D
 const Game = preload("res://scripts/game.gd")
 const Board = preload("res://scripts/board.gd")
 const Cards = preload("res://scripts/cards.gd")
+const Sfx = preload("res://scripts/sfx.gd")
 
 const W := 480.0
 const H := 860.0
@@ -48,21 +49,46 @@ var buttons: Array = []  # [Rect2, Callable]
 var sel_card := -1  # selected owned card slot, for the detail bar
 var shown_score := 0.0
 var pulses := {}  # slot -> remaining seconds
-var floaters: Array = []  # [{"slot", "text", "t"}]
+var floaters: Array = []  # [{"slot", "text", "t"}], t < 0 means not shown yet
 var last_state := ""
+var sfx: Node
+## Queued animations from game events; only the head advances.
+var anims: Array = []
+var shake := 0.0
+var popups: Array = []  # [{"text", "t", "big"}]
+var jump_streak := 0  # rising pitch within a chain
+
+const STEP_TIME := 0.13
+const BOT_DELAY := 0.18
 
 
 func _ready() -> void:
 	font = ThemeDB.fallback_font
+	sfx = Sfx.new()
+	add_child(sfx)
 	game.new_run()
 	shown_score = game.score
 
 
+## The state the screen shows: the game may already be in the shop while the last move animates.
+func view_state() -> String:
+	return game.state if anims.is_empty() else "play"
+
+
 func _process(delta: float) -> void:
-	for f in game.take_fx():
-		pulses[f.slot] = 0.35
-		floaters.append({"slot": f.slot, "text": f.text, "t": 0.0})
-	var busy := absf(shown_score - game.score) > 0.5 or not pulses.is_empty() or not floaters.is_empty()
+	for e in game.take_events():
+		var dur := 0.0
+		if e.type == "move":
+			dur = STEP_TIME * (e.path.size() - 1) + (BOT_DELAY if e.by == "bot" else 0.0)
+		elif e.type == "score":
+			dur = 0.25
+		anims.append(e.merged({"t": 0.0, "dur": dur, "started": false}))
+	var fx := game.take_fx()
+	for i in fx.size():
+		floaters.append({"slot": fx[i].slot, "text": fx[i].text, "t": -0.09 * i})
+	_advance_anims(delta)
+	var busy := absf(shown_score - game.score) > 0.5 or not pulses.is_empty() or not floaters.is_empty() \
+		or not anims.is_empty() or shake > 0.0 or not popups.is_empty()
 	shown_score = lerpf(shown_score, game.score, minf(delta * 8.0, 1.0))
 	if absf(shown_score - game.score) <= 0.5:
 		shown_score = game.score
@@ -71,24 +97,92 @@ func _process(delta: float) -> void:
 		if pulses[k] <= 0.0:
 			pulses.erase(k)
 	for f in floaters:
+		var was_hidden: bool = f.t < 0.0
 		f.t += delta
+		if was_hidden and f.t >= 0.0:
+			pulses[f.slot] = 0.35
+			sfx.play("tick", 1.0 + 0.08 * f.slot)
 	floaters = floaters.filter(func(f): return f.t < 1.1)
+	for p in popups:
+		p.t += delta
+	popups = popups.filter(func(p): return p.t < 1.0)
+	shake = maxf(shake - delta * 30.0, 0.0)
 	if busy:
 		queue_redraw()
+
+
+func _advance_anims(delta: float) -> void:
+	while not anims.is_empty():
+		var a: Dictionary = anims[0]
+		if not a.started:
+			a.started = true
+			_on_anim_start(a)
+		a.t += delta
+		if a.t < a.dur:
+			return
+		delta = a.t - a.dur
+		anims.pop_front()
+		_on_anim_end(a)
+
+
+func _on_anim_start(a: Dictionary) -> void:
+	match a.type:
+		"score":
+			popups.append({"text": "+%d" % a.gain, "t": 0.0, "big": a.big})
+			sfx.play("score", 1.0 + minf(a.gain / 2000.0, 0.6))
+			shake = 10.0 if a.big else 3.0
+			jump_streak = 0
+		"win":
+			sfx.play("win")
+		"lost":
+			sfx.play("lose")
+			shake = 8.0
+
+
+func _on_anim_end(a: Dictionary) -> void:
+	if a.type != "move":
+		return
+	if a.captured.is_empty():
+		sfx.play("step")
+	elif a.by == "bot":
+		sfx.play("hit")
+		shake = 6.0
+	else:
+		jump_streak += 1
+		sfx.play("jump", 1.0 + 0.12 * (jump_streak - 1))
+
+
+## Where a moving piece is drawn right now, or null if the move has finished.
+func _anim_pos(a: Dictionary):
+	var path: Array = a.path
+	var t: float = a.t - (BOT_DELAY if a.by == "bot" else 0.0)
+	if not a.started or t <= 0.0:
+		return ORIGIN + (Vector2(path[0]) + Vector2(0.5, 0.5)) * CELL
+	var seg := clampf(t / STEP_TIME, 0.0, path.size() - 1.0)
+	var i := mini(int(seg), path.size() - 2)
+	var k := ease(seg - i, -2.0)  # ease in-out
+	var p := Vector2(path[i]).lerp(Vector2(path[i + 1]), k)
+	var hop := sin(k * PI) * (10.0 if not a.captured.is_empty() else 3.0)
+	return ORIGIN + (p + Vector2(0.5, 0.5)) * CELL - Vector2(0, hop)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
+	if not anims.is_empty():
+		return
 	var pos := get_local_mouse_position()
 	for i in range(buttons.size() - 1, -1, -1):
 		if buttons[i][0].has_point(pos):
 			buttons[i][1].call()
+			sfx.play("select")
 			queue_redraw()
 			return
 	if game.state == "play":
 		var cell := Vector2i(((pos - ORIGIN) / CELL).floor())
 		if game.tap(cell):
+			if game.board.in_bounds(cell) and Board.is_player(game.board.get_cell(cell)):
+				sfx.play("select")
 			queue_redraw()
 
 
@@ -133,12 +227,15 @@ func _pill(rect: Rect2, label: String, color := C_TEXT) -> void:
 
 func _draw() -> void:
 	buttons.clear()
-	if game.state != last_state:
-		last_state = game.state
+	var st := view_state()
+	if st != last_state:
+		last_state = st
 		floaters.clear()
 		pulses.clear()
 	draw_rect(Rect2(0, 0, W, H), C_BG)
-	if game.state == "shop":
+	if shake > 0.0:
+		draw_set_transform(Vector2(randf_range(-shake, shake), randf_range(-shake, shake)) * 0.5)
+	if st == "shop":
 		_draw_shop()
 		return
 	_draw_top_bar()
@@ -147,9 +244,11 @@ func _draw() -> void:
 	_draw_board()
 	_draw_card_row(Vector2(24, 708), true)
 	_draw_detail_bar(Rect2(24, 816, W - 48, 38))
-	if game.state == "lost":
+	_draw_popups()
+	draw_set_transform(Vector2.ZERO)
+	if st == "lost":
 		_draw_lost()
-	elif game.state == "won":
+	elif st == "won":
 		_draw_won()
 
 
@@ -203,6 +302,10 @@ func _draw_chain_panel() -> void:
 func _draw_board() -> void:
 	_box(Rect2(ORIGIN - Vector2(8, 8), Vector2(CELL * Board.SIZE + 16, CELL * Board.SIZE + 16)), C_PANEL, 14, C_BORDER, 1)
 	var targets: Array = game.legal_targets(game.selected) if game.state == "play" else []
+	var hidden := {}  # cells whose piece is drawn by a pending animation instead
+	for a in anims:
+		if a.type == "move":
+			hidden[a.path.back()] = true
 	for y in Board.SIZE:
 		for x in Board.SIZE:
 			var p := Vector2i(x, y)
@@ -214,20 +317,49 @@ func _draw_board() -> void:
 					draw_rect(r.grow(-6), C_GOLD_TILE, false, 4)
 				Board.Tile.RED:
 					draw_rect(r.grow(-6), C_RED_TILE, false, 4)
-			if game.bot_last_move.has(p):
+			if game.bot_last_move.has(p) and anims.is_empty():
 				draw_rect(r, C_BOT)
 			if p == game.selected:
 				draw_rect(r, C_HILITE)
-			if targets.has(p):
+			if targets.has(p) and anims.is_empty():
 				draw_circle(c, 10, C_HILITE)
 			var v: int = game.board.get_cell(p)
-			if v == Board.EMPTY:
-				continue
-			var col := C_PLAYER if Board.is_player(v) else C_FOE
-			draw_circle(c, CELL * 0.36, col.darkened(0.35))
-			draw_circle(c, CELL * 0.30, col)
-			if v == Board.KING or v == Board.FOE_KING:
-				draw_circle(c, CELL * 0.14, C_GOLD_TILE)
+			if v != Board.EMPTY and not hidden.has(p):
+				_draw_piece(c, v)
+	# Pieces captured by moves that haven't animated past them yet.
+	for a in anims:
+		if a.type != "move":
+			continue
+		for j in a.captured.size():
+			var cap: Vector2i = a.captured[j]
+			var fade := 1.0
+			if a.started:
+				var t: float = a.t - (BOT_DELAY if a.by == "bot" else 0.0)
+				fade = clampf(1.0 - (t - STEP_TIME * (j + 0.5)) / 0.12, 0.0, 1.0)
+			if fade > 0.0 and not hidden.has(cap):
+				_draw_piece(ORIGIN + (Vector2(cap) + Vector2(0.5, 0.5)) * CELL, a.ctypes[j], fade)
+	for a in anims:
+		if a.type == "move":
+			_draw_piece(_anim_pos(a), a.piece)
+
+
+func _draw_piece(c: Vector2, v: int, alpha := 1.0) -> void:
+	var col := C_PLAYER if Board.is_player(v) else C_FOE
+	var r := CELL * (0.36 if alpha >= 1.0 else 0.36 * (0.6 + 0.4 * alpha))
+	draw_circle(c, r, Color(col.darkened(0.35), alpha))
+	draw_circle(c, r * 0.83, Color(col, alpha))
+	if v == Board.KING or v == Board.FOE_KING:
+		draw_circle(c, r * 0.39, Color(C_GOLD_TILE, alpha))
+
+
+func _draw_popups() -> void:
+	for p in popups:
+		var k: float = p.t
+		var a := clampf(1.6 - k * 1.6, 0.0, 1.0)
+		var size := int((44 if p.big else 32) * (1.0 + 0.25 * maxf(0.0, 0.2 - k) / 0.2))
+		var y := ORIGIN.y + CELL * Board.SIZE / 2 - k * 50
+		_text(p.text, Vector2(ORIGIN.x + 3, y + 3), size, Color(0, 0, 0, a * 0.6), CELL * Board.SIZE, HORIZONTAL_ALIGNMENT_CENTER)
+		_text(p.text, Vector2(ORIGIN.x, y), size, Color(C_ACCENT, a), CELL * Board.SIZE, HORIZONTAL_ALIGNMENT_CENTER)
 
 
 func _draw_card(rect: Rect2, id: String, selected := false, lift := 0.0) -> void:
@@ -254,7 +386,7 @@ func _draw_card_row(origin: Vector2, interactive: bool) -> void:
 			var idx := i
 			buttons.append([r, func(): sel_card = -1 if sel_card == idx else idx])
 	for f in floaters:
-		if f.slot >= game.cards.size():
+		if f.slot >= game.cards.size() or f.t < 0.0:
 			continue
 		var x: float = origin.x + f.slot * (CARD_SIZE.x + CARD_GAP)
 		var a: float = clampf(1.2 - f.t, 0.0, 1.0)

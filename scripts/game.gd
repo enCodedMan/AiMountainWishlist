@@ -57,6 +57,10 @@ var message := ""
 var bot_last_move: Array = []
 ## Card triggers since the UI last read them: [{"slot": int, "text": String}]
 var fx: Array = []
+## Visual events for the UI to animate, in order:
+## {"type": "move", "by": "player"|"bot", "piece", "path": [cells], "captured": [cells], "ctypes": [ints]}
+## {"type": "score", "gain", "big": bool} | {"type": "win"} | {"type": "lost"}
+var events: Array = []
 
 
 func new_run(seed_value: int = -1) -> void:
@@ -192,6 +196,9 @@ func tap(p: Vector2i) -> bool:
 func _move(from: Vector2i, to: Vector2i) -> void:
 	var piece := board.get_cell(from)
 	var is_jump := absi(to.x - from.x) == 2
+	var mid_cell: Vector2i = (from + to) / 2
+	events.append({"type": "move", "by": "player", "piece": piece, "path": [from, to],
+		"captured": [mid_cell] if is_jump else [], "ctypes": [board.get_cell(mid_cell)] if is_jump else []})
 	board.set_cell(from, Board.EMPTY)
 	board.set_cell(to, piece)
 	if is_jump:
@@ -238,6 +245,7 @@ func _end_move() -> void:
 		last_mult = maxi(int(round(maxi(chain_mult, 1) * chain_xmult)), 1)
 		last_gain = last_chips * last_mult
 		score += last_gain
+		events.append({"type": "score", "gain": last_gain, "big": last_gain * 2 >= target})
 		if chain_jumps >= 2:
 			chains_this_round += 1
 		message = "+%d" % last_gain
@@ -252,6 +260,7 @@ func _end_move() -> void:
 		_spawn_wave()
 	if turns_left <= 0:
 		state = "lost"
+		events.append({"type": "lost"})
 		message = "Out of turns on ante %d" % ante()
 		return
 	_bot_turn()
@@ -261,10 +270,12 @@ func _end_move() -> void:
 		bot_last_move = first + bot_last_move
 	if board.positions_of(Board.is_player).is_empty():
 		state = "lost"
+		events.append({"type": "lost"})
 		message = "Your pieces were wiped out"
 
 
 func _win_round() -> void:
+	events.append({"type": "win"})
 	_trigger("round_end", {})
 	var earned: int = STAGE_REWARD[stage()] + turns_left
 	money += earned
@@ -428,6 +439,12 @@ func _card_effect(card: Dictionary, event: String, ctx: Dictionary) -> String:
 	return ""
 
 
+func take_events() -> Array:
+	var out := events
+	events = []
+	return out
+
+
 func take_fx() -> Array:
 	var out := fx
 	fx = []
@@ -537,6 +554,8 @@ func _bot_turn() -> void:
 			if v > best:
 				best = v
 				pick = m
+	events.append({"type": "move", "by": "bot", "piece": board.get_cell(pick.from), "path": [pick.from] + pick.path,
+		"captured": pick.captured, "ctypes": pick.captured.map(func(c): return board.get_cell(c))})
 	apply_bot_move(board, pick)
 	bot_last_move = [pick.from] + pick.path
 	if not pick.captured.is_empty():
