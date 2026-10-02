@@ -58,7 +58,9 @@ var selected := Vector2i(-1, -1)
 var in_chain := false
 var move_caps: Array = []  # piece types captured during the current player move
 var move_crowned := false
-var phoenix_used := false
+var phoenix_left := 0  # Phoenix revivals left this round
+var turncoat_used := false
+var move_cap_cells: Array = []
 var shop: Array = []  # relic ids for sale
 var message := ""
 var last_result := ""  # "won" | "lost" for the shop header
@@ -127,8 +129,8 @@ func _fx(id: String, text: String) -> void:
 
 func player_rules() -> Dictionary:
 	return {
-		"back_capture": has("backstab"), "flying_kings": has("flying"), "sprint": has("sprint"),
-		"crown_row_offset": 1 if has("early") else 0, "iron_kings": has("iron"), "fortress": has("fortress"),
+		"back_capture": has("backstab"), "flying_kings": has("flying"), "sprint": has("sprint"), "leapfrog": has("leapfrog"),
+		"crown_row_offset": 2 if has("early") else 0, "iron_kings": has("iron"), "fortress": has("fortress"),
 	}
 
 
@@ -163,22 +165,37 @@ func start_round() -> void:
 	order.sort_custom(func(a, b): return a == Board.PAWN and b == Board.KING)
 	for i in mini(order.size(), HOME.size()):
 		board.set_cell(HOME[i], order[i])
+	if has("kingmaker"):
+		var pawns := board.positions_of(func(v): return v == Board.PAWN)
+		pawns.sort_custom(func(a, b): return a.y < b.y)
+		if not pawns.is_empty():
+			board.set_cell(pawns[0], Board.KING)
+			_fx("kingmaker", "crowned")
 	max_turns = BASE_TURNS + TURNS_PER_ENEMY * board.count_side(-1)
 	if is_boss("short"):
 		max_turns = max_turns * 2 / 3
+	if has("hourglass"):
+		max_turns += 5
+		_fx("hourglass", "+5 turns")
 	turns_left = max_turns
-	phoenix_used = false
+	phoenix_left = 2
+	turncoat_used = false
 	_reset_move()
 	state = "play"
 	message = "Capture every enemy piece"
 	if stage() == 2:
 		message = "Boss: %s. %s" % [BOSSES[boss].name, BOSSES[boss].desc]
+	if has("quake"):
+		var front := board.positions_of(Board.is_foe).filter(func(c): return c.y == 2)
+		if not front.is_empty():
+			_zap(front)
+			_fx("quake", "quake x%d" % front.size())
 	if has("scout"):
 		var foes := board.positions_of(Board.is_foe)
 		foes.sort_custom(func(a, b): return a.y > b.y)
 		if not foes.is_empty():
-			_zap([foes[0]])
-			_fx("scout", "removed 1")
+			_zap(foes.slice(0, 2))
+			_fx("scout", "removed %d" % mini(foes.size(), 2))
 	if is_boss("ambush"):
 		_bot_turn()
 	_check_round_over()
@@ -188,6 +205,7 @@ func _reset_move() -> void:
 	in_chain = false
 	selected = Vector2i(-1, -1)
 	move_caps = []
+	move_cap_cells = []
 	move_crowned = false
 
 
@@ -251,6 +269,7 @@ func _player_step(from: Vector2i, to: Vector2i) -> void:
 	board.set_cell(from, Board.EMPTY)
 	if not jump.is_empty():
 		move_caps.append(ctypes[0])
+		move_cap_cells.append(jump.cap)
 		board.set_cell(jump.cap, Board.EMPTY)
 	board.set_cell(to, v)
 	if not Board.is_king(v) and Board.crowns_at(1, to.y, rules):
@@ -275,9 +294,17 @@ func _end_player_move(at: Vector2i) -> void:
 			_gold(n)
 			_fx("bounty", "+$%d" % n)
 		if n >= 2 and has("hunter"):
-			_gold(2)
-			_fx("hunter", "+$2")
-		if n >= 3 and has("lightning"):
+			_gold(3)
+			_fx("hunter", "+$3")
+		if has("turncoat") and not turncoat_used:
+			for c in move_cap_cells:
+				if board.get_cell(c) == Board.EMPTY:
+					var was_king: bool = move_caps[move_cap_cells.find(c)] == Board.FOE_KING
+					board.set_cell(c, Board.KING if was_king or Board.crowns_at(1, c.y, player_rules()) else Board.PAWN)
+					turncoat_used = true
+					_fx("turncoat", "joined you")
+					break
+		if n >= 2 and has("lightning"):
 			var foes := board.positions_of(Board.is_foe)
 			if not foes.is_empty():
 				_zap([foes[rng.randi_range(0, foes.size() - 1)]])
@@ -287,8 +314,9 @@ func _end_player_move(at: Vector2i) -> void:
 		if kings > 0 and has("executioner"):
 			_gold(3 * kings)
 			var pawns := board.positions_of(func(v): return v == Board.FOE)
+			pawns.shuffle()
 			if not pawns.is_empty():
-				_zap([pawns[rng.randi_range(0, pawns.size() - 1)]])
+				_zap(pawns.slice(0, 2))
 			_fx("executioner", "+$%d" % (3 * kings))
 		if n >= 2 and has("momentum"):
 			extra_turn = true
@@ -298,13 +326,18 @@ func _end_player_move(at: Vector2i) -> void:
 		run_stats.crowns += 1
 		if has("blast"):
 			var hits: Array = []
-			for d in Board.DIAGONALS:
-				var q: Vector2i = at + d
-				if board.in_bounds(q) and Board.is_foe(board.get_cell(q)):
+			for q in _around(at):
+				if Board.is_foe(board.get_cell(q)):
 					hits.append(q)
 			if not hits.is_empty():
 				_zap(hits)
 				_fx("blast", "boom x%d" % hits.size())
+		if has("heir"):
+			for p in HOME.slice(3) + HOME.slice(0, 3):
+				if board.get_cell(p) == Board.EMPTY:
+					board.set_cell(p, Board.PAWN)
+					_fx("heir", "+1 pawn")
+					break
 		if has("rush"):
 			extra_turn = true
 			_fx("rush", "move again")
@@ -373,7 +406,7 @@ func _win_round(reason: String) -> void:
 		earned += turns_left
 		_fx("greed", "+$%d" % turns_left)
 	if has("piggy"):
-		var interest := mini(money / 5, 5)
+		var interest := mini(money / 4, 6)
 		if interest > 0:
 			earned += interest
 			_fx("piggy", "+$%d" % interest)
@@ -512,20 +545,33 @@ func _bot_turn() -> void:
 	if has("bomb"):
 		var hits: Array = []
 		for c in cap_cells:
-			for d in Board.DIAGONALS:
-				var q: Vector2i = c + d
-				if board.in_bounds(q) and Board.is_foe(board.get_cell(q)) and not hits.has(q):
+			for q in _around(c):
+				if Board.is_foe(board.get_cell(q)) and not hits.has(q):
 					hits.append(q)
 		if not hits.is_empty():
 			_zap(hits)
 			_fx("bomb", "boom x%d" % hits.size())
-	if has("phoenix") and not phoenix_used:
-		for p in HOME.slice(3) + HOME.slice(0, 3):
-			if board.get_cell(p) == Board.EMPTY:
-				board.set_cell(p, res.cap_types[0])
-				phoenix_used = true
-				_fx("phoenix", "revived")
+	if has("phoenix"):
+		for t in res.cap_types:
+			if phoenix_left <= 0:
 				break
+			for p in HOME.slice(3) + HOME.slice(0, 3):
+				if board.get_cell(p) == Board.EMPTY:
+					board.set_cell(p, t)
+					phoenix_left -= 1
+					_fx("phoenix", "revived")
+					break
+
+
+## The 8 cells around c that are on the board.
+func _around(c: Vector2i) -> Array:
+	var out: Array = []
+	for dy in [-1, 0, 1]:
+		for dx in [-1, 0, 1]:
+			var q := c + Vector2i(dx, dy)
+			if (dx != 0 or dy != 0) and board.in_bounds(q):
+				out.append(q)
+	return out
 
 
 ## Enemy pawns never crown. One that reaches your back row breaks through:

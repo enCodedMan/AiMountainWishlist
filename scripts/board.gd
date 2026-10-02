@@ -6,7 +6,8 @@ extends RefCounted
 ##   sprint: pawns may step two squares forward on a quiet move
 ##   crown_row_offset: pawns crown this many rows early (0 = last row)
 ##   iron_kings: this side's kings can't be captured
-##   fortress: this side's pieces on its own back row can't be captured
+##   fortress: this side's pieces on its own back two rows can't be captured
+##   leapfrog: pieces may hop over a friendly piece on a quiet move
 ##   no_crown: this side's pawns never crown
 
 const SIZE := 6
@@ -130,7 +131,7 @@ func _immune(p: Vector2i, def_rules: Dictionary) -> bool:
 	var v := get_cell(p)
 	if def_rules.get("iron_kings", false) and is_king(v):
 		return true
-	if def_rules.get("fortress", false) and p.y == back_row(side_of(v)):
+	if def_rules.get("fortress", false) and absi(p.y - back_row(side_of(v))) <= 1:
 		return true
 	return false
 
@@ -154,6 +155,11 @@ func step_targets(p: Vector2i, rules: Dictionary) -> Array:
 			var two: Vector2i = p + d * 2
 			if in_bounds(two) and get_cell(one) == EMPTY and get_cell(two) == EMPTY:
 				out.append(two)
+		if rules.get("leapfrog", false):
+			var over: Vector2i = p + d
+			var land: Vector2i = p + d * 2
+			if in_bounds(land) and side_of(get_cell(over)) == side and get_cell(land) == EMPTY and not out.has(land):
+				out.append(land)
 	return out
 
 

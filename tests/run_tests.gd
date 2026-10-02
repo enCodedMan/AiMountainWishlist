@@ -44,6 +44,7 @@ func _init() -> void:
 	test_formations()
 	test_relic_rules()
 	test_relic_triggers()
+	test_new_relics()
 	test_bot()
 	test_shop()
 	test_profile_unlocks()
@@ -178,7 +179,7 @@ func test_relic_triggers() -> void:
 	g.tap(Vector2i(0, 5))
 	g.tap(Vector2i(2, 3))
 	g.tap(Vector2i(4, 1))
-	check(g.money == money + 4, "Bounty +$2 and Hunter +$2")
+	check(g.money == money + 5, "Bounty +$2 and Hunter +$3")
 	check(g.message == "Move again!" and g.turns_left == 11, "Momentum grants another move")
 	g = blank_game({Vector2i(2, 3): Board.PAWN, Vector2i(4, 5): Board.PAWN, Vector2i(1, 2): Board.FOE, Vector2i(5, 0): Board.FOE})
 	g.relics = ["bomb"]
@@ -187,7 +188,7 @@ func test_relic_triggers() -> void:
 	g = blank_game({Vector2i(2, 3): Board.PAWN, Vector2i(1, 2): Board.FOE, Vector2i(5, 0): Board.FOE})
 	g.relics = ["phoenix"]
 	g._bot_turn()
-	check(g.board.count_side(1) == 1 and g.phoenix_used, "Phoenix revives the lost piece")
+	check(g.board.count_side(1) == 1 and g.phoenix_left == 1, "Phoenix revives the lost piece")
 	g = blank_game({Vector2i(1, 2): Board.PAWN, Vector2i(2, 1): Board.FOE, Vector2i(4, 1): Board.FOE, Vector2i(0, 1): Board.FOE})
 	g.relics = ["blast"]
 	g.tap(Vector2i(1, 2))
@@ -199,7 +200,41 @@ func test_relic_triggers() -> void:
 	g.state = "shop"
 	var n := Formations.build(g.formation, g.ante()).size()
 	g.next_round()
-	check(g.board.count_side(-1) == n - 1, "Scout removes one enemy at round start")
+	check(g.board.count_side(-1) == n - 2, "Scout removes two enemies at round start")
+
+
+func test_new_relics() -> void:
+	print("new relics")
+	var g := blank_game({Vector2i(1, 4): Board.PAWN, Vector2i(2, 3): Board.PAWN, Vector2i(5, 0): Board.FOE})
+	g.relics = ["leapfrog"]
+	check(g.legal_targets(Vector2i(1, 4)).has(Vector2i(3, 2)), "Leapfrog hops a friendly piece")
+	g = blank_game({Vector2i(1, 4): Board.PAWN, Vector2i(2, 3): Board.FOE, Vector2i(5, 0): Board.FOE})
+	g.relics = ["turncoat"]
+	g.tap(Vector2i(1, 4))
+	g.tap(Vector2i(3, 2))
+	check(g.board.count_side(1) == 2, "Turncoat: the captured enemy joins you")
+	g = blank_game({Vector2i(1, 4): Board.PAWN, Vector2i(2, 3): Board.FOE, Vector2i(4, 1): Board.FOE})
+	g.relics = ["fortress"]
+	check(g.board.legal_moves(-1, g.foe_rules(), g.player_rules()).all(func(m): return m.caps.is_empty()), "Fortress guards the back two rows")
+	g = blank_game({Vector2i(2, 3): Board.PAWN, Vector2i(4, 5): Board.PAWN, Vector2i(5, 0): Board.FOE})
+	g.relics = ["heir"]
+	g.tap(Vector2i(2, 3))
+	g.tap(Vector2i(1, 2))
+	check(g.relics == ["heir"] and g.run_stats.crowns == 0, "no crown without Early Crown")
+	g = blank_game({Vector2i(2, 1): Board.PAWN, Vector2i(5, 4): Board.FOE})
+	g.relics = ["heir"]
+	g.tap(Vector2i(2, 1))
+	g.tap(Vector2i(1, 0))
+	check(g.board.count_side(1) == 2, "Heir adds a pawn when you crown")
+	var r := Game.new()
+	r.new_run(3)
+	r.relics = ["hourglass", "kingmaker", "quake"]
+	r.formation = {"name": "Test", "pieces": [[1, 0, "p"], [1, 2, "p"], [3, 2, "p"]]}
+	r.state = "shop"
+	r.next_round()
+	check(r.board.count_side(-1) == 1, "Quake destroys the enemy front row")
+	check(r.max_turns == Game.BASE_TURNS + Game.TURNS_PER_ENEMY * 3 + 5, "Hourglass adds 5 turns")
+	check(r.board.positions_of(func(v): return v == Board.KING).size() == 1, "Kingmaker crowns a pawn")
 
 
 func test_bot() -> void:

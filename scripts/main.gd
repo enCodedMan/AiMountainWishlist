@@ -468,7 +468,7 @@ func _draw_relic(rect: Rect2, id: String, selected := false, lift := 0.0, disabl
 	_box(rect, C_PANEL_HI, 10, rc if selected else C_BORDER, 2 if selected else 1)
 	_box(Rect2(rect.position + Vector2(6, 6), Vector2(rect.size.x - 12, 4)), rc, 2)
 	_text(info.tag, rect.position + Vector2(0, 26), 10, rc, rect.size.x, HORIZONTAL_ALIGNMENT_CENTER)
-	_wrap(info.name, rect.position + Vector2(6, 46), rect.size.x - 12, 13, C_TEXT, 3, HORIZONTAL_ALIGNMENT_CENTER)
+	_wrap(info.name, rect.position + Vector2(4, 46), rect.size.x - 8, 13 if info.name.length() <= 7 or " " in info.name else 11, C_TEXT, 3, HORIZONTAL_ALIGNMENT_CENTER)
 	if disabled:
 		_box(rect, Color(C_BG, 0.7), 10)
 		_text("OFF", rect.position + Vector2(0, rect.size.y - 12), 11, C_DANGER, rect.size.x, HORIZONTAL_ALIGNMENT_CENTER)
@@ -540,33 +540,33 @@ func _draw_shop() -> void:
 	for i in game.shop.size():
 		var id: String = game.shop[i]
 		var info: Dictionary = Relics.ALL[id]
-		var r := Rect2(24 + i * (card_w + 12), 120, card_w, 196)
+		var r := Rect2(24 + i * (card_w + 12), 120, card_w, 226)
 		var rc: Color = RARITY_COLORS[info.rarity]
 		_box(r, C_PANEL_HI, 12, C_BORDER, 1)
 		_box(Rect2(r.position + Vector2(8, 8), Vector2(r.size.x - 16, 4)), rc, 2)
 		_text(RARITY_NAMES[info.rarity].to_upper() + " · " + info.tag, r.position + Vector2(0, 30), 10, rc, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 		_wrap(info.name, r.position + Vector2(8, 52), r.size.x - 16, 15, C_TEXT, 2, HORIZONTAL_ALIGNMENT_CENTER)
-		_wrap(info.desc, r.position + Vector2(10, 94), r.size.x - 20, 12, C_MUTED, 4, HORIZONTAL_ALIGNMENT_CENTER)
+		_wrap(info.desc, r.position + Vector2(8, 94), r.size.x - 16, 12, C_MUTED, 5, HORIZONTAL_ALIGNMENT_CENTER)
 		var idx := i
 		_button(Rect2(r.position.x + 8, r.end.y - 46, r.size.x - 16, 38), "$%d" % game.relic_cost(id), func(): game.buy(idx), game.can_buy(i), true)
 	if game.shop.is_empty():
 		_text("Sold out", Vector2(24, 220), 16, C_MUTED, W - 48, HORIZONTAL_ALIGNMENT_CENTER)
 	# Army services and next formation
-	_text("YOUR ARMY", Vector2(24, 342), 11, C_MUTED)
+	_text("YOUR ARMY", Vector2(24, 370), 11, C_MUTED)
 	var pawns := game.army.count(Board.PAWN)
 	var kings := game.army.count(Board.KING)
-	_text("%d pawns, %d kings (max %d)" % [pawns, kings, Game.ARMY_MAX], Vector2(24, 364), 15)
-	_button(Rect2(24, 376, 196, 40), "Recruit pawn $%d" % Game.RECRUIT_COST, func(): game.recruit(), game.can_recruit())
-	_button(Rect2(24, 424, 196, 40), "Crown a pawn $%d" % Game.CROWN_COST, func(): game.crown_pawn(), game.can_crown())
-	_button(Rect2(24, 472, 196, 40), "Reroll relics $%d" % Game.REROLL_COST, func(): game.reroll(), game.money >= Game.REROLL_COST)
-	var pv := Vector2(248, 352)
+	_text("%d pawns, %d kings (max %d)" % [pawns, kings, Game.ARMY_MAX], Vector2(24, 392), 15)
+	_button(Rect2(24, 404, 196, 40), "Recruit pawn $%d" % Game.RECRUIT_COST, func(): game.recruit(), game.can_recruit())
+	_button(Rect2(24, 452, 196, 40), "Crown a pawn $%d" % Game.CROWN_COST, func(): game.crown_pawn(), game.can_crown())
+	_button(Rect2(24, 500, 196, 40), "Reroll relics $%d" % Game.REROLL_COST, func(): game.reroll(), game.money >= Game.REROLL_COST)
+	var pv := Vector2(248, 380)
 	var label: String = "NEXT: " + game.formation.name.to_upper()
 	if game.stage() == 2:
 		label = "NEXT BOSS: " + Game.BOSSES[game.boss].name.to_upper()
-	_text(label, Vector2(pv.x, 342), 11, C_DANGER if game.stage() == 2 else C_MUTED)
+	_text(label, Vector2(pv.x, 370), 11, C_DANGER if game.stage() == 2 else C_MUTED)
 	_draw_formation_preview(pv + Vector2(0, 8), 24.0)
 	if game.stage() == 2:
-		_wrap("%s formation. %s" % [game.formation.name, Game.BOSSES[game.boss].desc], Vector2(pv.x, 520), W - 24 - pv.x, 12, C_DANGER, 2)
+		_wrap("%s formation. %s" % [game.formation.name, Game.BOSSES[game.boss].desc], Vector2(pv.x, 548), W - 24 - pv.x, 12, C_DANGER, 2)
 	_draw_relic_row(Vector2(24, 600), true)
 	_draw_detail_bar(Rect2(24, 712, W - 48, 38))
 	_button(Rect2(24, 784, W - 48, 52), "Next: %s round" % Game.STAGE_NAMES[game.stage()], func():
@@ -667,14 +667,14 @@ func _draw_collection() -> void:
 			_box(r, C_PANEL, 10, C_ACCENT if coll_sel == id else C_BORDER, 2 if coll_sel == id else 1)
 			_text("?", r.position + Vector2(0, 58), 26, C_MUTED, r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 		buttons.append([r, func(): coll_sel = id])
-	var info_r := Rect2(24, 718, W - 48, 64)
+	var info_r := Rect2(24, 704, W - 48, 80)
 	_box(info_r, C_PANEL, 12, C_BORDER, 1)
 	if coll_sel == "":
 		_text("Tap a relic to see what it does.", info_r.position + Vector2(0, 38), 14, C_MUTED, info_r.size.x, HORIZONTAL_ALIGNMENT_CENTER)
 	elif profile.is_unlocked(coll_sel):
 		var info: Dictionary = Relics.ALL[coll_sel]
 		_text("%s  ·  %s" % [info.name, RARITY_NAMES[info.rarity]], info_r.position + Vector2(14, 24), 15, RARITY_COLORS[info.rarity])
-		_text(info.desc, info_r.position + Vector2(14, 48), 13, C_TEXT)
+		_wrap(info.desc, info_r.position + Vector2(14, 44), info_r.size.x - 28, 13, C_TEXT, 2)
 	else:
 		_text("Locked", info_r.position + Vector2(14, 24), 15, C_MUTED)
 		_text("Unlock: " + Profile.UNLOCK_HINTS.get(coll_sel, ""), info_r.position + Vector2(14, 48), 13, C_TEXT)

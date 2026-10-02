@@ -16,7 +16,7 @@ Tap a white piece, then tap a green dot to move. Captures are mandatory for both
 
 **Lives:** 3. Losing a round (out of turns, or no legal moves) costs a life and you retry the same round. Losing your whole army ends the run.
 
-**Relics (passive, 5 slots):** 20 relics that change the rules (Backstab, Sprint, Flying Kings, Iron Kings, Fortress), add triggers (Powder Keg, Coronation Blast, Chain Lightning, Momentum) or make money (Bounty, Greed, Piggy Bank). Order matters only for the Silence boss.
+**Relics (passive, 5 slots):** 26 relics in families that stack: RULE (Backstab, Sprint, Leapfrog, Flying Kings), CROWN (Early Crown 2 rows early, Coronation Blast, Heir, Kingmaker), CHAIN (Chain Lightning, Executioner, Turncoat), TEMPO (Momentum, Coronation Rush, Hourglass), DEFENSE (Phoenix, Powder Keg, Iron Kings, Fortress, Undertow), START (Scout, Quake) and GOLD. Order matters only for the Silence boss.
 
 **No score.** Score was cut in v2: winning the checkers game is the goal, so every capture and every lost piece matters directly.
 

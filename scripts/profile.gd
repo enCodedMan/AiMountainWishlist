@@ -7,6 +7,7 @@ const PATH := "user://profile.json"
 const STARTER := [
 	"backstab", "sprint", "phoenix", "bomb", "blast", "bounty",
 	"hunter", "greed", "piggy", "recruiter", "scout", "momentum",
+	"hourglass", "leapfrog", "heir",
 ]
 
 const UNLOCK_HINTS := {
@@ -18,6 +19,9 @@ const UNLOCK_HINTS := {
 	"undertow": "Reach ante 3",
 	"flying": "Crown 8 pawns in total",
 	"iron": "Beat 2 bosses in total",
+	"quake": "Capture 25 pieces in total",
+	"turncoat": "Beat a boss",
+	"kingmaker": "Reach ante 4",
 }
 
 const ARMY_HINTS := {
@@ -84,6 +88,12 @@ func _met(id: String, game) -> bool:
 			return game.ante() >= 3
 		"flying":
 			return data.crowns + rs.crowns >= 8
+		"quake":
+			return data.captures + rs.captures >= 25
+		"turncoat":
+			return data.get("bosses", 0) + rs.bosses >= 1
+		"kingmaker":
+			return game.ante() >= 4
 		"iron":
 			return data.get("bosses", 0) + rs.bosses >= 2
 		"crowned":
