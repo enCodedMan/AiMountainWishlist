@@ -1,0 +1,87 @@
+<title>Kingjump</title>
+<style>
+/* Full-screen game canvas; the game draws its own dark UI, so the page commits to one dark look. */
+:root { --bg: #13121c; --panel: #1e1c2b; --fg: #f4f1ea; --muted: #9a96b0; --accent: #f5c542; color-scheme: dark; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); overflow: hidden; }
+body { font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+[hidden] { display: none !important; }
+#canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+#start { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); padding-inline: 16px; }
+#start .box { display: grid; gap: 14px; justify-items: center; text-align: center; max-width: 22rem; }
+#start h1 { margin: 0; font-size: 2.6rem; letter-spacing: 0.04em; color: var(--accent); }
+#start p { margin: 0; color: var(--muted); }
+#play { font: inherit; font-weight: 600; font-size: 1.1rem; color: var(--bg); background: var(--accent); border: 0; border-radius: 12px; padding: 14px 48px; cursor: pointer; }
+#play:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
+#play[disabled] { opacity: 0.6; cursor: default; }
+#bar { width: 14rem; max-width: 100%; height: 6px; border-radius: 3px; background: var(--panel); overflow: hidden; }
+#bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+#msg { min-height: 1.4em; font-size: 0.9rem; }
+</style>
+<canvas id="canvas" tabindex="0"></canvas>
+<div id="start">
+  <div class="box">
+    <h1>KINGJUMP</h1>
+    <p>A checkers roguelike. Chain jumps, stack cards, beat the bot.</p>
+    <button id="play" type="button">Play</button>
+    <div id="bar" hidden><i></i></div>
+    <p id="msg"></p>
+  </div>
+</div>
+<script>
+// Artifact hosting only serves text-like files under 16MB, so the engine (gzipped)
+// and game pack ship as base64 text and are unpacked here before Godot sees them.
+(function () {
+  const realFetch = window.fetch.bind(window);
+  async function decode(name) {
+    const txt = await (await realFetch(name)).text();
+    const bin = atob(txt.trim());
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return buf;
+  }
+  window.fetch = async function (input, init) {
+    const url = typeof input === "string" ? input : input.url;
+    if (/index\.wasm(\?|$)/.test(url)) {
+      const buf = await decode("engine.txt");
+      const body = new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"));
+      return new Response(body, { status: 200, headers: { "Content-Type": "application/wasm" } });
+    }
+    if (/index\.pck(\?|$)/.test(url)) {
+      const buf = await decode("pack.txt");
+      return new Response(buf, { status: 200, headers: { "Content-Type": "application/octet-stream", "Content-Length": String(buf.length) } });
+    }
+    return realFetch(input, init);
+  };
+})();
+</script>
+<script src="index.js"></script>
+<script>
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":174176,"index.wasm":35376909},"focusCanvas":true,"gdextensionLibs":[]};
+const engine = new Engine(GODOT_CONFIG);
+const play = document.getElementById("play");
+const bar = document.getElementById("bar");
+const msg = document.getElementById("msg");
+let done = false;
+function reveal() {
+  document.getElementById("start").hidden = true;
+  document.getElementById("canvas").focus();
+}
+play.addEventListener("click", () => {
+  play.disabled = true;
+  bar.hidden = false;
+  msg.textContent = "Loading the game…";
+  engine.startGame({
+    onProgress: (cur, total) => {
+      if (total > 0) bar.firstElementChild.style.width = Math.min(100, (cur / total) * 100) + "%";
+      if (total > 0 && cur >= total && !done) {
+        done = true;
+        msg.textContent = "Starting…";
+        setTimeout(reveal, 1200);
+      }
+    },
+  }).then(reveal).catch((err) => {
+    play.disabled = false;
+    msg.textContent = "The game couldn't start: " + (err && err.message ? err.message : err) + ". Try a current Chrome or Safari.";
+  });
+});
+</script>
